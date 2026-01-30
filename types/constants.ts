@@ -6,7 +6,7 @@ export const CompositionProps = z.object({
 });
 
 export const defaultMyCompProps: z.infer<typeof CompositionProps> = {
-  title: "Next.js and Remotion",
+  title: "我的 Remotion 视频",
 };
 
 export const DURATION_IN_FRAMES = 200;

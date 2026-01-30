@@ -1,20 +1,39 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { exec } from 'child_process';
-import { promisify } from 'util';
+import { existsSync } from 'fs';
 import { writeFile, readFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { z } from 'zod';
 
-const execAsync = promisify(exec);
-
-// 输入验证
 const renderRequestSchema = z.object({
   compositionId: z.string(),
   inputProps: z.object({
     title: z.string(),
   }),
 });
+
+const resolveBrowserExecutable = () => {
+  const candidates = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  ];
+
+  const localAppData = process.env.LOCALAPPDATA;
+  if (localAppData) {
+    candidates.unshift(`${localAppData}\\Google\\Chrome\\Application\\chrome.exe`);
+  }
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +45,13 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         const encoder = new TextEncoder();
         
-        const sendProgress = (data: any) => {
+        const sendProgress = (data: {
+          stage: 'preparing' | 'bundling' | 'rendering' | 'finalizing' | 'done' | 'error';
+          progress?: number;
+          videoBase64?: string;
+          fileName?: string;
+          error?: string;
+        }) => {
           const message = `data: ${JSON.stringify(data)}\n\n`;
           controller.enqueue(encoder.encode(message));
         };
@@ -45,7 +70,11 @@ export async function POST(request: NextRequest) {
           // 2. 使用Remotion CLI渲染
           sendProgress({ stage: 'rendering', progress: 0 });
           
-          const command = `npx remotion render ${compositionId} "${outputFile}" --props="${propsFile}" --log=verbose`;
+          const browserExecutable = resolveBrowserExecutable();
+          const browserExecutableArg = browserExecutable
+            ? ` --browser-executable="${browserExecutable}" --chrome-mode=chrome-for-testing`
+            : '';
+          const command = `npx remotion render ${compositionId} "${outputFile}" --props="${propsFile}"${browserExecutableArg} --log=verbose`;
           
           console.log('Executing command:', command);
           

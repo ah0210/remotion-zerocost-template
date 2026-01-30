@@ -19,7 +19,7 @@ export const ErrorComp: React.FC<{
         <path d="M12 8v4" stroke="currentColor"></path>
         <path d="M12 16h.01" stroke="currentColor"></path>
       </svg>
-      <strong>Error:</strong> {message}
+      <strong>错误：</strong> {message}
     </div>
   );
 };

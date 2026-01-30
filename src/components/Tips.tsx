@@ -35,18 +35,18 @@ export const Tips: React.FC = () => {
     <div className="flex flex-col md:flex-row font-geist">
       <Tip
         href="https://www.remotion.dev/docs/the-fundamentals"
-        title="Learn Remotion"
-        description="Learn how to customize this video written in React."
+        title="学习 Remotion"
+        description="了解如何用 React 定制这段视频。"
       ></Tip>
       <Tip
         href="https://github.com/remotion-dev/template-next-app-dir"
-        title="See source"
-        description="Visit the GitHub repository for this app."
+        title="查看源码"
+        description="前往该应用的 GitHub 仓库。"
       ></Tip>
       <Tip
         href="https://remotion.dev/discord"
-        title="Join the community"
-        description="Chat with others builders on Discord."
+        title="加入社区"
+        description="在 Discord 与其他开发者交流。"
       ></Tip>
     </div>
   );

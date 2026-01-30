@@ -2,8 +2,8 @@ import "../../styles/global.css";
 import { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
-  title: "Remotion and Next.js",
-  description: "Remotion and Next.js",
+  title: "Remotion 视频生成器",
+  description: "基于 Remotion 与 Next.js 的视频生成器",
 };
 
 export const viewport: Viewport = {
@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body className="bg-background">{children}</body>
     </html>
   );

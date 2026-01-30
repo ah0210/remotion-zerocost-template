@@ -62,18 +62,17 @@ Remotion 官方模板非常出色，但它们通常引导您走向在 AWS Lambda
 
 在浏览器中打开 [http://localhost:3000](http://localhost:3000) 查看结果！
 
-## 工作原理
+## Windows 安装说明
 
-该模板利用了 `@remotion/renderer` 包中的 `renderMediaOnBrowser` 的强大功能。下面是简化的工作流程：
+-   已将平台相关的 Remotion compositor 依赖设置为可选依赖，Windows 环境可以正常安装。
+-   如遇到 npm 的依赖解析警告，可直接忽略，不影响开发与渲染。
 
-1.  用户在前端点击"渲染"按钮。
-2.  我们调用 `renderMediaOnBrowser`，并将我们的 Remotion 合成传递给它。
-3.  Remotion 使用浏览器内置的 WebCodecs API 来渲染视频的每一帧。
-4.  通过状态管理在 UI 中跟踪并更新进度。
-5.  渲染完成后，输出的是一个 `Blob`（一个类文件对象）。
-6.  这个 `Blob` 被转换成一个可下载的 URL，然后赋给一个下载按钮。
+## 渲染方式
 
-所有这一切都发生在用户的浏览器标签页中——渲染过程不涉及任何后端服务器或云函数。
+-   **浏览器渲染（Browser Render）：** 前端直接调用 `@remotion/web-renderer`，在浏览器中生成视频 Blob 并下载。
+-   **服务器渲染（Server Render）：** 前端请求 `/api/render-cli`，由服务端执行 `npx remotion render`，再把结果返回给前端下载。
+
+页面上的切换按钮可以在两种方式之间自由选择。
 
 ## 如何定制
 

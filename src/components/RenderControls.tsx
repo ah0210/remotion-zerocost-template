@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { AlignEnd } from "./AlignEnd";
 import { Button } from "./Button";
 import { InputContainer } from "./Container";
@@ -7,17 +9,44 @@ import { Input } from "./Input";
 import { ProgressBar } from "./ProgressBar";
 import { Spacing } from "./Spacing";
 import { COMP_NAME, CompositionProps } from "../../types/constants";
-import { useServerRendering } from "../helpers/use-server-rendering";
+import {
+  CompositionConfig,
+  useBrowserRendering,
+  useServerRendering,
+} from "../helpers/use-server-rendering";
 
 export const RenderControls: React.FC<{
   text: string;
-  setText: React.Dispatch<React.SetStateAction<string>>;
+  setText: Dispatch<SetStateAction<string>>;
   inputProps: z.infer<typeof CompositionProps>;
-}> = ({ text, setText, inputProps }) => {
-  const { renderMedia, state, undo, downloadVideo } = useServerRendering(COMP_NAME, inputProps);
+  composition: CompositionConfig;
+}> = ({ text, setText, inputProps, composition }) => {
+  const [mode, setMode] = useState<"browser" | "server">("server");
+
+  const serverRenderer = useServerRendering(COMP_NAME, inputProps);
+  const browserRenderer = useBrowserRendering(composition, inputProps);
+
+  const { renderMedia, state, undo, downloadVideo } =
+    mode === "server" ? serverRenderer : browserRenderer;
 
   return (
     <InputContainer>
+      <div className="flex flex-row gap-2 mb-4">
+        <Button
+          secondary={mode !== "browser"}
+          disabled={state.status === "preparing" || state.status === "rendering" || state.status === "finalizing" || state.status === "bundling"}
+          onClick={() => setMode("browser")}
+        >
+          浏览器渲染
+        </Button>
+        <Button
+          secondary={mode !== "server"}
+          disabled={state.status === "preparing" || state.status === "rendering" || state.status === "finalizing" || state.status === "bundling"}
+          onClick={() => setMode("server")}
+        >
+          服务器渲染
+        </Button>
+      </div>
       {state.status === "init" ||
       state.status === "preparing" ||
       state.status === "error" ? (
@@ -34,7 +63,7 @@ export const RenderControls: React.FC<{
               loading={state.status === "preparing"}
               onClick={renderMedia}
             >
-              Render video
+              开始渲染
             </Button>
           </AlignEnd>
           {state.status === "error" ? (
@@ -59,27 +88,27 @@ export const RenderControls: React.FC<{
           <AlignEnd>
             {state.status === "done" ? (
               <Button onClick={downloadVideo}>
-                Download Video
+                下载视频
               </Button>
             ) : null}
             {state.status === "bundling" ? (
               <Button disabled>
-                Bundling...
+                打包中...
               </Button>
             ) : null}
             {state.status === "rendering" ? (
               <Button disabled>
-                Rendering...
+                渲染中...
               </Button>
             ) : null}
             {state.status === "finalizing" ? (
               <Button disabled>
-                Finalizing...
+                生成中...
               </Button>
             ) : null}
             <Spacing></Spacing>
             <Button onClick={undo} secondary>
-              Start Over
+              重新开始
             </Button>
           </AlignEnd>
         </>

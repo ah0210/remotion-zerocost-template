@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { useCallback, useMemo, useState } from "react";
+import type { ComponentType } from "react";
 import { CompositionProps } from "../../types/constants";
 
 export type State =
@@ -30,6 +31,21 @@ export type State =
       videoBlob: Blob;
       fileName: string;
     };
+
+export type CompositionConfig = {
+  component: ComponentType<z.infer<typeof CompositionProps>>;
+  id: string;
+  width: number;
+  height: number;
+  fps: number;
+  durationInFrames: number;
+  defaultProps: z.infer<typeof CompositionProps>;
+};
+
+const getSafeFileName = (title: string) => {
+  const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_");
+  return `${safeTitle}.mp4`;
+};
 
 export const useServerRendering = (
   compositionId: string,
@@ -124,7 +140,7 @@ export const useServerRendering = (
                   setState({
                     status: 'done',
                     videoBlob,
-                    fileName: data.fileName,
+                    fileName: data.fileName ?? getSafeFileName(inputProps.title),
                   });
                   break;
                 
@@ -173,3 +189,77 @@ export const useServerRendering = (
     };
   }, [renderMedia, state, undo, downloadVideo]);
 }; 
+
+export const useBrowserRendering = (
+  composition: CompositionConfig,
+  inputProps: z.infer<typeof CompositionProps>,
+) => {
+  const [state, setState] = useState<State>({
+    status: "init",
+  });
+
+  const renderMedia = useCallback(async () => {
+    try {
+      setState({ status: "preparing" });
+
+      const { renderMediaOnWeb } = await import("@remotion/web-renderer");
+
+      const result = await renderMediaOnWeb({
+        composition,
+        inputProps,
+        onProgress: (progress) => {
+          const renderedFrames =
+            progress.encodedFrames ?? progress.renderedFrames ?? 0;
+          const normalized =
+            composition.durationInFrames === 0
+              ? 0
+              : renderedFrames / composition.durationInFrames;
+          const clamped = Math.max(0, Math.min(1, normalized));
+          setState({
+            status: "rendering",
+            progress: clamped,
+          });
+        },
+      });
+
+      const videoBlob = await result.getBlob();
+
+      setState({
+        status: "done",
+        videoBlob,
+        fileName: getSafeFileName(inputProps.title),
+      });
+    } catch (error) {
+      setState({
+        status: "error",
+        error: error as Error,
+      });
+    }
+  }, [composition, inputProps]);
+
+  const undo = useCallback(() => {
+    setState({ status: "init" });
+  }, []);
+
+  const downloadVideo = useCallback(() => {
+    if (state.status === "done") {
+      const url = URL.createObjectURL(state.videoBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = state.fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  }, [state]);
+
+  return useMemo(() => {
+    return {
+      renderMedia,
+      state,
+      undo,
+      downloadVideo,
+    };
+  }, [renderMedia, state, undo, downloadVideo]);
+};

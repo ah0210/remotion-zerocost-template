@@ -5,6 +5,7 @@ import type { NextPage } from "next";
 import React, { useMemo, useState } from "react";
 import { z } from "zod";
 import {
+  COMP_NAME,
   defaultMyCompProps,
   CompositionProps,
   DURATION_IN_FRAMES,
@@ -51,8 +52,30 @@ const Home: NextPage = () => {
           text={text}
           setText={setText}
           inputProps={inputProps}
+          composition={{
+            component: Main,
+            id: COMP_NAME,
+            width: VIDEO_WIDTH,
+            height: VIDEO_HEIGHT,
+            fps: VIDEO_FPS,
+            durationInFrames: DURATION_IN_FRAMES,
+            defaultProps: defaultMyCompProps,
+          }}
         ></RenderControls>
         <Spacing></Spacing>
+        <Spacing></Spacing>
+        <div className="border border-unfocused-border-color p-geist rounded-geist bg-background font-geist">
+          <h3 className="text-foreground font-bold text-base mb-3">
+            使用帮助
+          </h3>
+          <ol className="text-sm leading-6 text-subtitle list-decimal pl-5 space-y-2">
+            <li>在输入框中填写你的视频标题。</li>
+            <li>选择渲染方式：浏览器渲染或服务器渲染。</li>
+            <li>点击“开始渲染”，等待进度完成。</li>
+            <li>渲染完成后点击“下载视频”保存到本地。</li>
+            <li>需要重新生成时，点击“重新开始”。</li>
+          </ol>
+        </div>
         <Spacing></Spacing>
         <Spacing></Spacing>
         <Spacing></Spacing>
