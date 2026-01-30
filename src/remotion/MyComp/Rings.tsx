@@ -29,7 +29,8 @@ const RadialGradient: React.FC<{
 
 export const Rings: React.FC<{
   outProgress: number;
-}> = ({ outProgress }) => {
+  accentColor?: string;
+}> = ({ outProgress, accentColor }) => {
   const scale = 1 / (1 - outProgress);
   const { height } = useVideoConfig();
 
@@ -46,7 +47,7 @@ export const Rings: React.FC<{
             <RadialGradient
               key={i}
               radius={height * 0.3 * i}
-              color={interpolateColors(i, [0, 4], ["#fff", "#fff"])}
+              color={interpolateColors(i, [0, 4], [accentColor ?? "#fff", "#fff"])}
             />
           );
         })

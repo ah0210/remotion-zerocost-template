@@ -16,7 +16,12 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id={COMP_NAME}
         component={Main}
-        durationInFrames={DURATION_IN_FRAMES}
+        durationInFrames={defaultMyCompProps.durationInFrames ?? DURATION_IN_FRAMES}
+        calculateMetadata={({ props }) => {
+          return {
+            durationInFrames: props.durationInFrames ?? DURATION_IN_FRAMES,
+          };
+        }}
         fps={VIDEO_FPS}
         width={VIDEO_WIDTH}
         height={VIDEO_HEIGHT}

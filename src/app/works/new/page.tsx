@@ -1,0 +1,951 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
+import { DURATION_IN_FRAMES } from "../../../../types/constants";
+
+type WorkItem = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  badgeText?: string;
+  coverImageDataUrl?: string;
+  coverVideoDataUrl?: string;
+  logoImageDataUrl?: string;
+  coverImageUrl?: string;
+  coverVideoUrl?: string;
+  logoImageUrl?: string;
+  audioDataUrl?: string;
+  audioUrl?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  accentColor?: string;
+  titleFontSize?: number;
+  subtitleFontSize?: number;
+  durationInFrames?: number;
+  coverMediaType?: "image" | "video";
+  mediaFit?: "cover" | "contain";
+  mediaPosition?: "center" | "top" | "bottom" | "left" | "right";
+  layout?: "center" | "left" | "image-top";
+  showRings?: boolean;
+  addToRenderPage: boolean;
+  createdAt: number;
+};
+
+const STORAGE_KEY = "remotion-works";
+
+const readWorks = (): WorkItem[] => {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as WorkItem[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeWorks = (works: WorkItem[]) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(works));
+};
+
+const NewWorkPage = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
+  const [badgeText, setBadgeText] = useState("");
+  const [layout, setLayout] = useState<"center" | "left" | "image-top">(
+    "center",
+  );
+  const [backgroundColor, setBackgroundColor] = useState("#ffffff");
+  const [textColor, setTextColor] = useState("#111827");
+  const [accentColor, setAccentColor] = useState("#2563eb");
+  const [coverImageDataUrl, setCoverImageDataUrl] = useState<string | undefined>(
+    undefined,
+  );
+  const [coverVideoDataUrl, setCoverVideoDataUrl] = useState<string | undefined>(
+    undefined,
+  );
+  const [logoImageDataUrl, setLogoImageDataUrl] = useState<string | undefined>(
+    undefined,
+  );
+  const [coverImageUrl, setCoverImageUrl] = useState("");
+  const [coverVideoUrl, setCoverVideoUrl] = useState("");
+  const [logoImageUrl, setLogoImageUrl] = useState("");
+  const [audioDataUrl, setAudioDataUrl] = useState<string | undefined>(undefined);
+  const [audioUrl, setAudioUrl] = useState("");
+  const [titleFontSize, setTitleFontSize] = useState("70");
+  const [subtitleFontSize, setSubtitleFontSize] = useState("24");
+  const [durationInFrames, setDurationInFrames] = useState(
+    String(DURATION_IN_FRAMES),
+  );
+  const [coverMediaType, setCoverMediaType] = useState<"image" | "video">(
+    "image",
+  );
+  const [mediaFit, setMediaFit] = useState<"cover" | "contain">("cover");
+  const [mediaPosition, setMediaPosition] = useState<
+    "center" | "top" | "bottom" | "left" | "right"
+  >("center");
+  const [showRings, setShowRings] = useState(true);
+  const [addToRenderPage, setAddToRenderPage] = useState(true);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const templates = useMemo(
+    () => [
+      {
+        id: "template-product",
+        name: "产品发布",
+        description: "强调标签 + 左侧图文",
+        data: {
+          title: "新品发布会",
+          subtitle: "为你的产品故事注入亮点",
+          badgeText: "热销推荐",
+          layout: "left" as const,
+          backgroundColor: "#0f172a",
+          textColor: "#f8fafc",
+          accentColor: "#22d3ee",
+          titleFontSize: 64,
+          subtitleFontSize: 26,
+          durationInFrames: 240,
+          coverMediaType: "image" as const,
+          mediaFit: "cover" as const,
+          mediaPosition: "center" as const,
+          showRings: true,
+        },
+      },
+      {
+        id: "template-brand",
+        name: "品牌展示",
+        description: "居中排版 + 简洁背景",
+        data: {
+          title: "品牌形象片",
+          subtitle: "让你的品牌更有温度",
+          badgeText: "故事感",
+          layout: "center" as const,
+          backgroundColor: "#ffffff",
+          textColor: "#111827",
+          accentColor: "#2563eb",
+          titleFontSize: 72,
+          subtitleFontSize: 24,
+          durationInFrames: 200,
+          coverMediaType: "image" as const,
+          mediaFit: "contain" as const,
+          mediaPosition: "center" as const,
+          showRings: true,
+        },
+      },
+      {
+        id: "template-video",
+        name: "视频节奏",
+        description: "顶部视频 + 强节奏",
+        data: {
+          title: "节奏感视频",
+          subtitle: "适合活动回顾或短片",
+          badgeText: "氛围感",
+          layout: "image-top" as const,
+          backgroundColor: "#111827",
+          textColor: "#f8fafc",
+          accentColor: "#f97316",
+          titleFontSize: 60,
+          subtitleFontSize: 24,
+          durationInFrames: 180,
+          coverMediaType: "video" as const,
+          mediaFit: "cover" as const,
+          mediaPosition: "center" as const,
+          showRings: false,
+        },
+      },
+    ],
+    [],
+  );
+
+  const applyTemplate = (template: (typeof templates)[number]) => {
+    setTitle(template.data.title);
+    setSubtitle(template.data.subtitle);
+    setBadgeText(template.data.badgeText);
+    setLayout(template.data.layout);
+    setBackgroundColor(template.data.backgroundColor);
+    setTextColor(template.data.textColor);
+    setAccentColor(template.data.accentColor);
+    setTitleFontSize(String(template.data.titleFontSize));
+    setSubtitleFontSize(String(template.data.subtitleFontSize));
+    setDurationInFrames(String(template.data.durationInFrames));
+    setCoverMediaType(template.data.coverMediaType);
+    setMediaFit(template.data.mediaFit);
+    setMediaPosition(template.data.mediaPosition);
+    setShowRings(template.data.showRings);
+    setCoverImageDataUrl(undefined);
+    setCoverVideoDataUrl(undefined);
+    setCoverImageUrl("");
+    setCoverVideoUrl("");
+    setLogoImageDataUrl(undefined);
+    setLogoImageUrl("");
+    setAudioDataUrl(undefined);
+    setAudioUrl("");
+    setSuccess("已套用模板，可继续调整。");
+    setError("");
+  };
+
+  useEffect(() => {
+    const workId = searchParams.get("workId");
+    if (!workId) {
+      setEditingId(null);
+      return;
+    }
+    const works = readWorks();
+    const target = works.find((work) => work.id === workId);
+    if (!target) {
+      setError("未找到对应的作品。");
+      setEditingId(null);
+      return;
+    }
+    setEditingId(target.id);
+    setTitle(target.title);
+    setSubtitle(target.subtitle ?? "");
+    setBadgeText(target.badgeText ?? "");
+    setLayout(target.layout ?? "center");
+    setBackgroundColor(target.backgroundColor ?? "#ffffff");
+    setTextColor(target.textColor ?? "#111827");
+    setAccentColor(target.accentColor ?? "#2563eb");
+    setCoverImageDataUrl(target.coverImageDataUrl);
+    setCoverVideoDataUrl(target.coverVideoDataUrl);
+    setLogoImageDataUrl(target.logoImageDataUrl);
+    setCoverImageUrl(target.coverImageUrl ?? "");
+    setCoverVideoUrl(target.coverVideoUrl ?? "");
+    setLogoImageUrl(target.logoImageUrl ?? "");
+    setAudioDataUrl(target.audioDataUrl);
+    setAudioUrl(target.audioUrl ?? "");
+    setTitleFontSize(String(target.titleFontSize ?? 70));
+    setSubtitleFontSize(String(target.subtitleFontSize ?? 24));
+    setDurationInFrames(String(target.durationInFrames ?? DURATION_IN_FRAMES));
+    setCoverMediaType(target.coverMediaType ?? "image");
+    setMediaFit(target.mediaFit ?? "cover");
+    setMediaPosition(target.mediaPosition ?? "center");
+    setShowRings(target.showRings ?? true);
+    setAddToRenderPage(target.addToRenderPage);
+  }, [searchParams]);
+
+  const previewStyle = useMemo(() => {
+    return {
+      backgroundColor,
+    };
+  }, [backgroundColor]);
+  const resolvedTitleFontSize = Number(titleFontSize) || 70;
+  const resolvedSubtitleFontSize = Number(subtitleFontSize) || 24;
+  const resolvedDurationInFrames = Number(durationInFrames) || DURATION_IN_FRAMES;
+  const resolvedCoverImage =
+    coverImageUrl.trim().length > 0 ? coverImageUrl.trim() : coverImageDataUrl;
+  const resolvedCoverVideo =
+    coverVideoUrl.trim().length > 0 ? coverVideoUrl.trim() : coverVideoDataUrl;
+  const resolvedLogoImage =
+    logoImageUrl.trim().length > 0 ? logoImageUrl.trim() : logoImageDataUrl;
+  const resolvedAudio =
+    audioUrl.trim().length > 0 ? audioUrl.trim() : audioDataUrl;
+  const previewMediaType =
+    coverMediaType === "video" && resolvedCoverVideo
+      ? "video"
+      : resolvedCoverImage
+        ? "image"
+        : "empty";
+
+  const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    const file = e.currentTarget.files?.[0];
+    if (!file) {
+      setCoverImageDataUrl(undefined);
+      return;
+    }
+    setCoverMediaType("image");
+    setCoverImageUrl("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setCoverImageDataUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleVideoChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    const file = e.currentTarget.files?.[0];
+    if (!file) {
+      setCoverVideoDataUrl(undefined);
+      return;
+    }
+    setCoverMediaType("video");
+    setCoverVideoUrl("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setCoverVideoDataUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAudioChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    const file = e.currentTarget.files?.[0];
+    if (!file) {
+      setAudioDataUrl(undefined);
+      return;
+    }
+    setAudioUrl("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setAudioDataUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    const file = e.currentTarget.files?.[0];
+    if (!file) {
+      setLogoImageDataUrl(undefined);
+      return;
+    }
+    setLogoImageUrl("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setLogoImageDataUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (!title.trim()) {
+      setError("请填写作品标题。");
+      return;
+    }
+    if (resolvedTitleFontSize <= 0) {
+      setError("标题字号必须大于 0。");
+      return;
+    }
+    if (resolvedSubtitleFontSize <= 0) {
+      setError("副标题字号必须大于 0。");
+      return;
+    }
+    if (resolvedDurationInFrames <= 0) {
+      setError("视频时长必须大于 0。");
+      return;
+    }
+
+    const works = readWorks();
+    if (editingId) {
+      const nextWorks = works.map((work) =>
+        work.id === editingId
+          ? {
+              ...work,
+              title: title.trim(),
+              subtitle: subtitle.trim() ? subtitle.trim() : undefined,
+              badgeText: badgeText.trim() ? badgeText.trim() : undefined,
+              coverImageDataUrl,
+              coverVideoDataUrl,
+              logoImageDataUrl,
+              coverImageUrl: coverImageUrl.trim() || undefined,
+              coverVideoUrl: coverVideoUrl.trim() || undefined,
+              logoImageUrl: logoImageUrl.trim() || undefined,
+              audioDataUrl,
+              audioUrl: audioUrl.trim() || undefined,
+              backgroundColor,
+              textColor,
+              accentColor,
+              titleFontSize: resolvedTitleFontSize,
+              subtitleFontSize: resolvedSubtitleFontSize,
+              durationInFrames: resolvedDurationInFrames,
+              coverMediaType,
+              mediaFit,
+              mediaPosition,
+              layout,
+              showRings,
+              addToRenderPage,
+            }
+          : work,
+      );
+      writeWorks(nextWorks);
+      if (addToRenderPage) {
+        router.push(`/?workId=${editingId}`);
+        return;
+      }
+      setSuccess("作品已更新，未加入渲染页面。");
+      return;
+    }
+
+    const newWork: WorkItem = {
+      id: `work_${Date.now()}`,
+      title: title.trim(),
+      subtitle: subtitle.trim() ? subtitle.trim() : undefined,
+      badgeText: badgeText.trim() ? badgeText.trim() : undefined,
+      coverImageDataUrl,
+      coverVideoDataUrl,
+      logoImageDataUrl,
+      coverImageUrl: coverImageUrl.trim() || undefined,
+      coverVideoUrl: coverVideoUrl.trim() || undefined,
+      logoImageUrl: logoImageUrl.trim() || undefined,
+      audioDataUrl,
+      audioUrl: audioUrl.trim() || undefined,
+      backgroundColor,
+      textColor,
+      accentColor,
+      titleFontSize: resolvedTitleFontSize,
+      subtitleFontSize: resolvedSubtitleFontSize,
+      durationInFrames: resolvedDurationInFrames,
+      coverMediaType,
+      mediaFit,
+      mediaPosition,
+      layout,
+      showRings,
+      addToRenderPage,
+      createdAt: Date.now(),
+    };
+
+    writeWorks([newWork, ...works]);
+
+    if (addToRenderPage) {
+      router.push(`/?workId=${newWork.id}`);
+      return;
+    }
+
+    setSuccess("作品已保存，未加入渲染页面。");
+  };
+
+  return (
+    <div className="max-w-screen-md m-auto mb-12 mt-16 font-geist px-4">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            {editingId ? "编辑 Remotion 作品" : "新增 Remotion 作品"}
+          </h1>
+          <p className="text-sm text-subtitle mt-2">
+            通过表单上传或填写素材，快速生成你的新作品。
+          </p>
+        </div>
+        <Link
+          href="/"
+          className="text-sm font-medium text-foreground border border-unfocused-border-color rounded-geist px-3 py-2 hover:border-focused-border-color"
+        >
+          返回渲染页面
+        </Link>
+      </div>
+      <div className="border border-unfocused-border-color rounded-geist bg-background p-geist mb-6 flex flex-col gap-4">
+        <div>
+          <h2 className="text-base font-bold text-foreground">模板一键套用</h2>
+          <p className="text-sm text-subtitle mt-1">
+            选择模板后可继续修改素材与样式
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {templates.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              className="text-left border border-unfocused-border-color rounded-geist p-3 hover:border-focused-border-color transition-colors"
+              onClick={() => applyTemplate(template)}
+            >
+              <div className="text-sm font-medium text-foreground">
+                {template.name}
+              </div>
+              <div className="text-xs text-subtitle mt-1">
+                {template.description}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+      <form
+        onSubmit={handleSubmit}
+        className="border border-unfocused-border-color rounded-geist bg-background p-geist flex flex-col gap-4"
+      >
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          作品标题
+          <input
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={title}
+            onChange={(e) => setTitle(e.currentTarget.value)}
+            placeholder="例如：我的第一支视频"
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          副标题
+          <input
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={subtitle}
+            onChange={(e) => setSubtitle(e.currentTarget.value)}
+            placeholder="可选，用于补充说明"
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          强调标签
+          <input
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={badgeText}
+            onChange={(e) => setBadgeText(e.currentTarget.value)}
+            placeholder="可选，例如：新品发布"
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          布局风格
+          <select
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={layout}
+            onChange={(e) =>
+              setLayout(e.currentTarget.value as "center" | "left" | "image-top")
+            }
+          >
+            <option value="center">居中标题布局</option>
+            <option value="left">左侧图文布局</option>
+            <option value="image-top">图片在上布局</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          素材类型
+          <select
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={coverMediaType}
+            onChange={(e) =>
+              setCoverMediaType(e.currentTarget.value as "image" | "video")
+            }
+          >
+            <option value="image">图片</option>
+            <option value="video">视频</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          素材裁切
+          <select
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={mediaFit}
+            onChange={(e) =>
+              setMediaFit(e.currentTarget.value as "cover" | "contain")
+            }
+          >
+            <option value="cover">裁切填充</option>
+            <option value="contain">完整展示</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          素材对齐
+          <select
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={mediaPosition}
+            onChange={(e) =>
+              setMediaPosition(
+                e.currentTarget.value as
+                  | "center"
+                  | "top"
+                  | "bottom"
+                  | "left"
+                  | "right",
+              )
+            }
+          >
+            <option value="center">居中</option>
+            <option value="top">顶部</option>
+            <option value="bottom">底部</option>
+            <option value="left">左侧</option>
+            <option value="right">右侧</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          背景颜色
+          <input
+            className="h-10 w-32 rounded-geist border border-unfocused-border-color p-1"
+            type="color"
+            value={backgroundColor}
+            onChange={(e) => setBackgroundColor(e.currentTarget.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          文本颜色
+          <input
+            className="h-10 w-32 rounded-geist border border-unfocused-border-color p-1"
+            type="color"
+            value={textColor}
+            onChange={(e) => setTextColor(e.currentTarget.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          强调色
+          <input
+            className="h-10 w-32 rounded-geist border border-unfocused-border-color p-1"
+            type="color"
+            value={accentColor}
+            onChange={(e) => setAccentColor(e.currentTarget.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          标题字号
+          <input
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            type="number"
+            min={24}
+            max={120}
+            value={titleFontSize}
+            onChange={(e) => setTitleFontSize(e.currentTarget.value)}
+            placeholder="例如：70"
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          副标题字号
+          <input
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            type="number"
+            min={16}
+            max={80}
+            value={subtitleFontSize}
+            onChange={(e) => setSubtitleFontSize(e.currentTarget.value)}
+            placeholder="例如：24"
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          视频时长（帧）
+          <input
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            type="number"
+            min={30}
+            max={2000}
+            value={durationInFrames}
+            onChange={(e) => setDurationInFrames(e.currentTarget.value)}
+            placeholder={`例如：${DURATION_IN_FRAMES}`}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          封面素材链接
+          <input
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={coverImageUrl}
+            onChange={(e) => {
+              setCoverImageUrl(e.currentTarget.value);
+              setCoverMediaType("image");
+            }}
+            placeholder="https://..."
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          上传封面素材
+          <input
+            className="text-sm"
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          视频素材链接
+          <input
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={coverVideoUrl}
+            onChange={(e) => {
+              setCoverVideoUrl(e.currentTarget.value);
+              setCoverMediaType("video");
+            }}
+            placeholder="https://..."
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          上传视频素材
+          <input
+            className="text-sm"
+            type="file"
+            accept="video/*"
+            onChange={handleVideoChange}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          音频素材链接
+          <input
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={audioUrl}
+            onChange={(e) => setAudioUrl(e.currentTarget.value)}
+            placeholder="https://..."
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          上传音频素材
+          <input
+            className="text-sm"
+            type="file"
+            accept="audio/*"
+            onChange={handleAudioChange}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          徽标素材链接
+          <input
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={logoImageUrl}
+            onChange={(e) => setLogoImageUrl(e.currentTarget.value)}
+            placeholder="https://..."
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          上传徽标素材
+          <input
+            className="text-sm"
+            type="file"
+            accept="image/*"
+            onChange={handleLogoChange}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={showRings}
+            onChange={(e) => setShowRings(e.currentTarget.checked)}
+          />
+          展示背景光环
+        </label>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={addToRenderPage}
+            onChange={(e) => setAddToRenderPage(e.currentTarget.checked)}
+          />
+          添加到渲染功能页面
+        </label>
+        {error ? <div className="text-geist-error text-sm">{error}</div> : null}
+        {success ? (
+          <div className="text-sm text-foreground">{success}</div>
+        ) : null}
+        <button
+          type="submit"
+          className="border-foreground border rounded-geist bg-foreground text-background px-geist-half font-geist h-10 font-medium transition-all duration-150 ease-in-out inline-flex items-center justify-center text-sm hover:bg-background hover:text-foreground hover:border-focused-border-color"
+        >
+          {editingId ? "保存修改" : "保存作品"}
+        </button>
+      </form>
+      <div className="mt-8 border border-unfocused-border-color rounded-geist bg-background p-geist">
+        <h3 className="text-base font-bold text-foreground mb-3">预览效果</h3>
+        <div className="rounded-2xl p-6" style={previewStyle}>
+          {layout === "left" ? (
+            <div className="flex items-center justify-between gap-8">
+              <div className="flex flex-col gap-3">
+                {badgeText ? (
+                  <span
+                    className="text-xs font-semibold px-2 py-1 rounded-full w-fit"
+                    style={{ backgroundColor: accentColor, color: "#ffffff" }}
+                  >
+                    {badgeText}
+                  </span>
+                ) : null}
+                {resolvedLogoImage ? (
+                  <Image
+                    src={resolvedLogoImage}
+                    alt="徽标预览"
+                    width={72}
+                    height={72}
+                    className="w-[72px] h-[72px] object-contain"
+                    unoptimized
+                  />
+                ) : null}
+                <div
+                  className="font-bold"
+                  style={{
+                    color: textColor,
+                    fontSize: `${resolvedTitleFontSize}px`,
+                  }}
+                >
+                  {title || "作品标题预览"}
+                </div>
+                {subtitle ? (
+                  <div
+                    className="text-sm"
+                    style={{
+                      color: textColor,
+                      fontSize: `${resolvedSubtitleFontSize}px`,
+                    }}
+                  >
+                    {subtitle}
+                  </div>
+                ) : null}
+              </div>
+              {previewMediaType === "video" && resolvedCoverVideo ? (
+                <video
+                  className="w-[220px] h-[140px] rounded-xl shadow-md"
+                  src={resolvedCoverVideo}
+                  muted
+                  playsInline
+                  loop
+                  autoPlay
+                  style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
+                />
+              ) : previewMediaType === "image" && resolvedCoverImage ? (
+                <Image
+                  src={resolvedCoverImage}
+                  alt="作品素材预览"
+                  width={220}
+                  height={140}
+                  className="w-[220px] h-[140px] rounded-xl shadow-md"
+                  style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
+                  unoptimized
+                />
+              ) : (
+                <div className="w-[220px] h-[140px] rounded-xl border border-dashed border-unfocused-border-color flex items-center justify-center text-xs text-subtitle">
+                  暂未上传素材
+                </div>
+              )}
+            </div>
+          ) : layout === "image-top" ? (
+            <div className="flex flex-col items-center gap-3">
+              {previewMediaType === "video" && resolvedCoverVideo ? (
+                <video
+                  className="w-[320px] h-[180px] rounded-xl shadow-md"
+                  src={resolvedCoverVideo}
+                  muted
+                  playsInline
+                  loop
+                  autoPlay
+                  style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
+                />
+              ) : previewMediaType === "image" && resolvedCoverImage ? (
+                <Image
+                  src={resolvedCoverImage}
+                  alt="作品素材预览"
+                  width={320}
+                  height={180}
+                  className="w-[320px] h-[180px] rounded-xl shadow-md"
+                  style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
+                  unoptimized
+                />
+              ) : (
+                <div className="w-[320px] h-[180px] rounded-xl border border-dashed border-unfocused-border-color flex items-center justify-center text-xs text-subtitle">
+                  暂未上传素材
+                </div>
+              )}
+              {badgeText ? (
+                <span
+                  className="text-xs font-semibold px-2 py-1 rounded-full w-fit"
+                  style={{ backgroundColor: accentColor, color: "#ffffff" }}
+                >
+                  {badgeText}
+                </span>
+              ) : null}
+              <div
+                className="font-bold"
+                style={{
+                  color: textColor,
+                  fontSize: `${resolvedTitleFontSize}px`,
+                }}
+              >
+                {title || "作品标题预览"}
+              </div>
+              {subtitle ? (
+                <div
+                  className="text-sm"
+                  style={{
+                    color: textColor,
+                    fontSize: `${resolvedSubtitleFontSize}px`,
+                  }}
+                >
+                  {subtitle}
+                </div>
+              ) : null}
+              {resolvedLogoImage ? (
+                <Image
+                  src={resolvedLogoImage}
+                  alt="徽标预览"
+                  width={72}
+                  height={72}
+                  className="w-[72px] h-[72px] object-contain"
+                  unoptimized
+                />
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              {badgeText ? (
+                <span
+                  className="text-xs font-semibold px-2 py-1 rounded-full w-fit"
+                  style={{ backgroundColor: accentColor, color: "#ffffff" }}
+                >
+                  {badgeText}
+                </span>
+              ) : null}
+            {resolvedLogoImage ? (
+                <Image
+                src={resolvedLogoImage}
+                  alt="徽标预览"
+                  width={72}
+                  height={72}
+                  className="w-[72px] h-[72px] object-contain"
+                  unoptimized
+                />
+              ) : null}
+            <div
+              className="font-bold"
+              style={{
+                color: textColor,
+                fontSize: `${resolvedTitleFontSize}px`,
+              }}
+            >
+                {title || "作品标题预览"}
+              </div>
+              {subtitle ? (
+              <div
+                className="text-sm"
+                style={{
+                  color: textColor,
+                  fontSize: `${resolvedSubtitleFontSize}px`,
+                }}
+              >
+                  {subtitle}
+                </div>
+              ) : null}
+            {previewMediaType === "video" && resolvedCoverVideo ? (
+                <video
+                className="w-[320px] h-[180px] rounded-xl shadow-md"
+                src={resolvedCoverVideo}
+                muted
+                playsInline
+                loop
+                autoPlay
+                style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
+              />
+              ) : previewMediaType === "image" && resolvedCoverImage ? (
+                <Image
+                src={resolvedCoverImage}
+                  alt="作品素材预览"
+                  width={320}
+                  height={180}
+                  className="w-[320px] h-[180px] rounded-xl shadow-md"
+                  style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
+                  unoptimized
+                />
+              ) : (
+                <div className="w-[320px] h-[180px] rounded-xl border border-dashed border-unfocused-border-color flex items-center justify-center text-xs text-subtitle">
+                  暂未上传素材
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {resolvedAudio ? (
+          <div className="mt-4">
+            <audio src={resolvedAudio} controls className="w-full" />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
+export default NewWorkPage;

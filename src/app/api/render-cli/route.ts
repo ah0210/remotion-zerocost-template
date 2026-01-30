@@ -10,6 +10,23 @@ const renderRequestSchema = z.object({
   compositionId: z.string(),
   inputProps: z.object({
     title: z.string(),
+    subtitle: z.string().optional(),
+    badgeText: z.string().optional(),
+    coverImageDataUrl: z.string().optional(),
+    coverVideoDataUrl: z.string().optional(),
+    logoImageDataUrl: z.string().optional(),
+    backgroundColor: z.string().optional(),
+    textColor: z.string().optional(),
+    accentColor: z.string().optional(),
+    titleFontSize: z.number().optional(),
+    subtitleFontSize: z.number().optional(),
+    durationInFrames: z.number().optional(),
+    coverMediaType: z.enum(["image", "video"]).optional(),
+    audioDataUrl: z.string().optional(),
+    mediaFit: z.enum(["cover", "contain"]).optional(),
+    mediaPosition: z.enum(["center", "top", "bottom", "left", "right"]).optional(),
+    layout: z.enum(["center", "left", "image-top"]).optional(),
+    showRings: z.boolean().optional(),
   }),
 });
 
