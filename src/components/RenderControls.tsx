@@ -19,11 +19,12 @@ export const RenderControls: React.FC<{
   text: string;
   setText: Dispatch<SetStateAction<string>>;
   inputProps: z.infer<typeof CompositionProps>;
+  serverInputProps: z.infer<typeof CompositionProps>;
   composition: CompositionConfig;
-}> = ({ text, setText, inputProps, composition }) => {
+}> = ({ text, setText, inputProps, serverInputProps, composition }) => {
   const [mode, setMode] = useState<"browser" | "server">("server");
 
-  const serverRenderer = useServerRendering(COMP_NAME, inputProps);
+  const serverRenderer = useServerRendering(COMP_NAME, serverInputProps);
   const browserRenderer = useBrowserRendering(composition, inputProps);
 
   const { renderMedia, state, undo, downloadVideo } =

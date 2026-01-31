@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { exec } from 'child_process';
 import { existsSync } from 'fs';
+import { createServer } from 'http';
 import { writeFile, readFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -52,6 +53,104 @@ const resolveBrowserExecutable = () => {
   return null;
 };
 
+const getFileExtension = (mime: string) => {
+  const normalized = mime.toLowerCase();
+  if (normalized === 'image/png') return 'png';
+  if (normalized === 'image/jpeg') return 'jpg';
+  if (normalized === 'image/webp') return 'webp';
+  if (normalized === 'image/gif') return 'gif';
+  if (normalized === 'video/mp4') return 'mp4';
+  if (normalized === 'video/webm') return 'webm';
+  if (normalized === 'audio/mpeg') return 'mp3';
+  if (normalized === 'audio/mp4') return 'm4a';
+  if (normalized === 'audio/wav') return 'wav';
+  if (normalized === 'audio/webm') return 'webm';
+  if (normalized === 'audio/ogg') return 'ogg';
+  if (normalized === 'audio/aac') return 'aac';
+  return 'bin';
+};
+
+const writeDataUrlToTempFile = async (
+  dataUrl: string,
+  prefix: string,
+  tmpDir: string,
+  baseUrl: string,
+  fileMap: Map<string, { path: string; mime: string }>,
+) => {
+  if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
+    return { value: dataUrl, filePath: undefined };
+  }
+  if (!dataUrl.startsWith('data:')) {
+    return { value: dataUrl, filePath: undefined };
+  }
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    return { value: dataUrl, filePath: undefined };
+  }
+  const [, mime, base64] = match;
+  const ext = getFileExtension(mime);
+  const fileName = `${prefix}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}.${ext}`;
+  const filePath = join(tmpDir, fileName);
+  await writeFile(filePath, Buffer.from(base64, 'base64'));
+  fileMap.set(fileName, { path: filePath, mime });
+  return { value: `${baseUrl}/${fileName}`, filePath };
+};
+
+const safeUnlink = async (filePath?: string) => {
+  if (!filePath) {
+    return;
+  }
+  try {
+    await unlink(filePath);
+  } catch {
+    return;
+  }
+};
+
+const startFileServer = async (
+  fileMap: Map<string, { path: string; mime: string }>,
+) => {
+  const server = createServer((req, res) => {
+    if (!req.url) {
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
+    const url = new URL(req.url, 'http://127.0.0.1');
+    const key = url.pathname.replace(/^\/+/, '');
+    const entry = fileMap.get(key);
+    if (!entry) {
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
+    readFile(entry.path)
+      .then((buffer) => {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', entry.mime);
+        res.end(buffer);
+      })
+      .catch(() => {
+        res.statusCode = 404;
+        res.end();
+      });
+  });
+  const baseUrl = await new Promise<string>((resolve, reject) => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address && typeof address === 'object') {
+        resolve(`http://127.0.0.1:${address.port}`);
+      } else {
+        reject(new Error('Failed to start local server'));
+      }
+    });
+    server.on('error', reject);
+  });
+  return { server, baseUrl };
+};
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -61,6 +160,11 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
+        let propsFile: string | undefined;
+        let outputFile: string | undefined;
+        const tempFiles: string[] = [];
+        let localServer: ReturnType<typeof createServer> | undefined;
+        let localBaseUrl = '';
         
         const sendProgress = (data: {
           stage: 'preparing' | 'bundling' | 'rendering' | 'finalizing' | 'done' | 'error';
@@ -78,10 +182,68 @@ export async function POST(request: NextRequest) {
 
           // 1. 创建临时props文件
           const tmpDir = tmpdir();
-          const propsFile = join(tmpDir, `props-${Date.now()}.json`);
-          const outputFile = join(tmpDir, `video-${Date.now()}.mp4`);
+          const fileMap = new Map<string, { path: string; mime: string }>();
+          const serverInfo = await startFileServer(fileMap);
+          localServer = serverInfo.server;
+          localBaseUrl = serverInfo.baseUrl;
+          propsFile = join(tmpDir, `props-${Date.now()}.json`);
+          outputFile = join(tmpDir, `video-${Date.now()}.mp4`);
+          const nextInputProps = { ...inputProps };
 
-          await writeFile(propsFile, JSON.stringify(inputProps));
+          if (inputProps.coverImageDataUrl) {
+            const result = await writeDataUrlToTempFile(
+              inputProps.coverImageDataUrl,
+              'cover-image',
+              tmpDir,
+              localBaseUrl,
+              fileMap,
+            );
+            nextInputProps.coverImageDataUrl = result.value;
+            if (result.filePath) {
+              tempFiles.push(result.filePath);
+            }
+          }
+          if (inputProps.coverVideoDataUrl) {
+            const result = await writeDataUrlToTempFile(
+              inputProps.coverVideoDataUrl,
+              'cover-video',
+              tmpDir,
+              localBaseUrl,
+              fileMap,
+            );
+            nextInputProps.coverVideoDataUrl = result.value;
+            if (result.filePath) {
+              tempFiles.push(result.filePath);
+            }
+          }
+          if (inputProps.logoImageDataUrl) {
+            const result = await writeDataUrlToTempFile(
+              inputProps.logoImageDataUrl,
+              'logo-image',
+              tmpDir,
+              localBaseUrl,
+              fileMap,
+            );
+            nextInputProps.logoImageDataUrl = result.value;
+            if (result.filePath) {
+              tempFiles.push(result.filePath);
+            }
+          }
+          if (inputProps.audioDataUrl) {
+            const result = await writeDataUrlToTempFile(
+              inputProps.audioDataUrl,
+              'audio',
+              tmpDir,
+              localBaseUrl,
+              fileMap,
+            );
+            nextInputProps.audioDataUrl = result.value;
+            if (result.filePath) {
+              tempFiles.push(result.filePath);
+            }
+          }
+
+          await writeFile(propsFile, JSON.stringify(nextInputProps));
           sendProgress({ stage: 'preparing', progress: 50 });
 
           // 2. 使用Remotion CLI渲染
@@ -102,6 +264,7 @@ export async function POST(request: NextRequest) {
           });
 
           let lastProgress = 0;
+          let stderrTail = '';
           
           // 监听stdout以获取进度信息
           childProcess.stdout?.on('data', (data: Buffer) => {
@@ -120,18 +283,44 @@ export async function POST(request: NextRequest) {
           });
 
           childProcess.stderr?.on('data', (data: Buffer) => {
-            console.error('Remotion error:', data.toString());
+            const chunk = data.toString();
+            console.error('Remotion error:', chunk);
+            stderrTail = `${stderrTail}${chunk}`;
+            if (stderrTail.length > 8000) {
+              stderrTail = stderrTail.slice(-8000);
+            }
           });
 
           // 等待命令完成
-          await new Promise((resolve, reject) => {
-            childProcess.on('close', (code: number | null) => {
-              if (code === 0) {
-                resolve(code);
-              } else {
-                reject(new Error(`Remotion command failed with exit code ${code}`));
-              }
+          await new Promise<void>((resolve, reject) => {
+            childProcess.on('error', (error) => {
+              reject(
+                new Error(
+                  `Remotion command failed to start: ${error.message}${
+                    stderrTail ? `\n${stderrTail}` : ''
+                  }`,
+                ),
+              );
             });
+            childProcess.on(
+              'close',
+              (code: number | null, signal: NodeJS.Signals | null) => {
+                if (code === 0) {
+                  resolve();
+                  return;
+                }
+                const reason = signal
+                  ? `signal ${signal}`
+                  : `exit code ${code ?? 'unknown'}`;
+                reject(
+                  new Error(
+                    `Remotion command failed with ${reason}${
+                      stderrTail ? `\n${stderrTail}` : ''
+                    }`,
+                  ),
+                );
+              },
+            );
           });
 
           // 3. 读取生成的视频文件
@@ -140,20 +329,12 @@ export async function POST(request: NextRequest) {
           const videoBuffer = await readFile(outputFile);
           const videoBase64 = videoBuffer.toString('base64');
 
-          // 4. 清理临时文件
-          try {
-            await unlink(propsFile);
-            await unlink(outputFile);
-          } catch (error) {
-            console.warn('Failed to clean up temporary files:', error);
-          }
-
           // 5. 发送最终结果
           sendProgress({ 
             stage: 'done', 
             progress: 100,
             videoBase64,
-            fileName: `${inputProps.title.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`
+            fileName: `${nextInputProps.title.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`
           });
 
           controller.close();
@@ -165,6 +346,15 @@ export async function POST(request: NextRequest) {
             error: error instanceof Error ? error.message : String(error) 
           });
           controller.close();
+        } finally {
+          if (localServer) {
+            await new Promise<void>((resolve) => {
+              localServer?.close(() => resolve());
+            });
+          }
+          await Promise.all(tempFiles.map((filePath) => safeUnlink(filePath)));
+          await safeUnlink(propsFile);
+          await safeUnlink(outputFile);
         }
       }
     });

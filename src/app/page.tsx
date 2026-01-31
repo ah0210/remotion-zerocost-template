@@ -88,6 +88,22 @@ const loadMediaBlob = async (mediaId: string): Promise<Blob | undefined> => {
   return blob;
 };
 
+const blobToDataUrl = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("读取素材失败"));
+      }
+    };
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("读取素材失败"));
+    reader.readAsDataURL(blob);
+  });
+};
+
 const Home: NextPage = () => {
   const searchParams = useSearchParams();
   const [text, setText] = useState<string>(defaultMyCompProps.title);
@@ -148,6 +164,18 @@ const Home: NextPage = () => {
   const [audioObjectUrl, setAudioObjectUrl] = useState<string | undefined>(
     undefined,
   );
+  const [coverImageServerDataUrl, setCoverImageServerDataUrl] = useState<
+    string | undefined
+  >(undefined);
+  const [coverVideoServerDataUrl, setCoverVideoServerDataUrl] = useState<
+    string | undefined
+  >(undefined);
+  const [logoImageServerDataUrl, setLogoImageServerDataUrl] = useState<
+    string | undefined
+  >(undefined);
+  const [audioServerDataUrl, setAudioServerDataUrl] = useState<
+    string | undefined
+  >(undefined);
   const [textColor, setTextColor] = useState<string | undefined>(
     defaultMyCompProps.textColor,
   );
@@ -306,6 +334,7 @@ const Home: NextPage = () => {
     const run = async () => {
       if (!coverImageMediaId) {
         setCoverImageObjectUrl(undefined);
+        setCoverImageServerDataUrl(undefined);
         return;
       }
       try {
@@ -315,6 +344,7 @@ const Home: NextPage = () => {
         }
         if (!blob) {
           setCoverImageObjectUrl(undefined);
+          setCoverImageServerDataUrl(undefined);
           return;
         }
         objectUrl = URL.createObjectURL(blob);
@@ -324,9 +354,14 @@ const Home: NextPage = () => {
           }
           return objectUrl;
         });
+        const dataUrl = await blobToDataUrl(blob);
+        if (active) {
+          setCoverImageServerDataUrl(dataUrl);
+        }
       } catch {
         if (active) {
           setCoverImageObjectUrl(undefined);
+          setCoverImageServerDataUrl(undefined);
         }
       }
     };
@@ -345,6 +380,7 @@ const Home: NextPage = () => {
     const run = async () => {
       if (!coverVideoMediaId) {
         setCoverVideoObjectUrl(undefined);
+        setCoverVideoServerDataUrl(undefined);
         return;
       }
       try {
@@ -354,6 +390,7 @@ const Home: NextPage = () => {
         }
         if (!blob) {
           setCoverVideoObjectUrl(undefined);
+          setCoverVideoServerDataUrl(undefined);
           return;
         }
         objectUrl = URL.createObjectURL(blob);
@@ -363,9 +400,14 @@ const Home: NextPage = () => {
           }
           return objectUrl;
         });
+        const dataUrl = await blobToDataUrl(blob);
+        if (active) {
+          setCoverVideoServerDataUrl(dataUrl);
+        }
       } catch {
         if (active) {
           setCoverVideoObjectUrl(undefined);
+          setCoverVideoServerDataUrl(undefined);
         }
       }
     };
@@ -384,6 +426,7 @@ const Home: NextPage = () => {
     const run = async () => {
       if (!logoImageMediaId) {
         setLogoImageObjectUrl(undefined);
+        setLogoImageServerDataUrl(undefined);
         return;
       }
       try {
@@ -393,6 +436,7 @@ const Home: NextPage = () => {
         }
         if (!blob) {
           setLogoImageObjectUrl(undefined);
+          setLogoImageServerDataUrl(undefined);
           return;
         }
         objectUrl = URL.createObjectURL(blob);
@@ -402,9 +446,14 @@ const Home: NextPage = () => {
           }
           return objectUrl;
         });
+        const dataUrl = await blobToDataUrl(blob);
+        if (active) {
+          setLogoImageServerDataUrl(dataUrl);
+        }
       } catch {
         if (active) {
           setLogoImageObjectUrl(undefined);
+          setLogoImageServerDataUrl(undefined);
         }
       }
     };
@@ -423,6 +472,7 @@ const Home: NextPage = () => {
     const run = async () => {
       if (!audioMediaId) {
         setAudioObjectUrl(undefined);
+        setAudioServerDataUrl(undefined);
         return;
       }
       try {
@@ -432,6 +482,7 @@ const Home: NextPage = () => {
         }
         if (!blob) {
           setAudioObjectUrl(undefined);
+          setAudioServerDataUrl(undefined);
           return;
         }
         objectUrl = URL.createObjectURL(blob);
@@ -441,9 +492,14 @@ const Home: NextPage = () => {
           }
           return objectUrl;
         });
+        const dataUrl = await blobToDataUrl(blob);
+        if (active) {
+          setAudioServerDataUrl(dataUrl);
+        }
       } catch {
         if (active) {
           setAudioObjectUrl(undefined);
+          setAudioServerDataUrl(undefined);
         }
       }
     };
@@ -510,6 +566,72 @@ const Home: NextPage = () => {
     layout,
     logoImageDataUrl,
     logoImageObjectUrl,
+    logoImageUrl,
+    mediaFit,
+    mediaPosition,
+    showRings,
+    subtitle,
+    subtitleFontSize,
+    text,
+    textColor,
+    titleFontSize,
+    durationInFrames,
+  ]);
+
+  const serverInputProps: z.infer<typeof CompositionProps> = useMemo(() => {
+    const resolvedCoverImage =
+      coverImageUrl.trim().length > 0
+        ? coverImageUrl.trim()
+        : coverImageServerDataUrl ?? coverImageDataUrl;
+    const resolvedCoverVideo =
+      coverVideoUrl.trim().length > 0
+        ? coverVideoUrl.trim()
+        : coverVideoServerDataUrl ?? coverVideoDataUrl;
+    const resolvedLogoImage =
+      logoImageUrl.trim().length > 0
+        ? logoImageUrl.trim()
+        : logoImageServerDataUrl ?? logoImageDataUrl;
+    const resolvedAudio =
+      audioUrl.trim().length > 0
+        ? audioUrl.trim()
+        : audioServerDataUrl ?? audioDataUrl;
+    return {
+      title: text,
+      subtitle: subtitle || undefined,
+      badgeText: badgeText || undefined,
+      coverImageDataUrl: resolvedCoverImage,
+      coverVideoDataUrl: resolvedCoverVideo,
+      logoImageDataUrl: resolvedLogoImage,
+      audioDataUrl: resolvedAudio,
+      backgroundColor,
+      textColor,
+      accentColor,
+      titleFontSize,
+      subtitleFontSize,
+      durationInFrames,
+      coverMediaType,
+      mediaFit,
+      mediaPosition,
+      layout,
+      showRings,
+    };
+  }, [
+    accentColor,
+    audioDataUrl,
+    audioServerDataUrl,
+    audioUrl,
+    backgroundColor,
+    badgeText,
+    coverImageDataUrl,
+    coverImageServerDataUrl,
+    coverImageUrl,
+    coverVideoDataUrl,
+    coverVideoServerDataUrl,
+    coverVideoUrl,
+    coverMediaType,
+    layout,
+    logoImageDataUrl,
+    logoImageServerDataUrl,
     logoImageUrl,
     mediaFit,
     mediaPosition,
@@ -632,6 +754,7 @@ const Home: NextPage = () => {
           text={text}
           setText={setText}
           inputProps={inputProps}
+        serverInputProps={serverInputProps}
           composition={{
             component: Main,
             id: COMP_NAME,

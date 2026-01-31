@@ -1,14 +1,13 @@
 import { z } from "zod";
 import {
   AbsoluteFill,
-  Audio,
   Img,
   Sequence,
   spring,
   useCurrentFrame,
   useVideoConfig,
-  Video,
 } from "remotion";
+import { Audio, Video } from "@remotion/media";
 import { CompositionProps } from "../../../types/constants";
 import { NextLogo } from "./NextLogo";
 import { loadFont, fontFamily } from "@remotion/google-fonts/Inter";

@@ -11,6 +11,7 @@
     "@remotion/bundler": "4.0.414",
     "@remotion/cli": "4.0.414",
     "@remotion/google-fonts": "4.0.414",
+    "@remotion/media": "4.0.414",
     "@remotion/paths": "4.0.414",
     "@remotion/player": "4.0.414",
     "@remotion/renderer": "4.0.414",
