@@ -3,6 +3,7 @@ import {
   AbsoluteFill,
   Img,
   Sequence,
+  interpolate,
   spring,
   useCurrentFrame,
   useVideoConfig,
@@ -27,6 +28,10 @@ export const Main = ({
   coverVideoDataUrl,
   logoImageDataUrl,
   imageArray,
+  imageSequence,
+  imageEffect,
+  transitionEffect,
+  imageDurationInFrames,
   subtitles,
   audioDataUrl,
   backgroundColor,
@@ -58,9 +63,18 @@ export const Main = ({
   const resolvedImageArray = (imageArray ?? [])
     .map((item) => item.trim())
     .filter(Boolean);
+  const resolvedImageSequence = (imageSequence ?? [])
+    .map((item) => ({
+      src: item.src.trim(),
+      durationInFrames: item.durationInFrames,
+      effect: item.effect,
+    }))
+    .filter((item) => item.src.length > 0);
   const resolvedSubtitles = (subtitles ?? [])
     .map((item) => item.trim())
     .filter(Boolean);
+  const resolvedImageEffect = imageEffect ?? "none";
+  const resolvedTransitionEffect = transitionEffect ?? "fade";
 
   const logoOut = spring({
     fps,
@@ -72,10 +86,47 @@ export const Main = ({
     delay: transitionStart,
   });
 
-  const perImageDuration =
-    resolvedImageArray.length > 0
-      ? Math.max(1, Math.floor(contentDuration / resolvedImageArray.length))
-      : 0;
+  const resolvedImageItems =
+    resolvedImageSequence.length > 0
+      ? resolvedImageSequence
+      : resolvedImageArray.map((src) => ({
+          src,
+          durationInFrames: imageDurationInFrames,
+          effect: resolvedImageEffect,
+        }));
+  const baseImageDuration =
+    imageDurationInFrames && imageDurationInFrames > 0
+      ? imageDurationInFrames
+      : resolvedImageItems.length > 0
+        ? Math.max(1, Math.floor(contentDuration / resolvedImageItems.length))
+        : 0;
+  const imageTimeline = (() => {
+    const timeline: Array<{
+      src: string;
+      start: number;
+      durationInFrames: number;
+      effect?: "none" | "zoom-in" | "zoom-out";
+    }> = [];
+    let start = 0;
+    for (const item of resolvedImageItems) {
+      if (start >= contentDuration) {
+        break;
+      }
+      const rawDuration = item.durationInFrames ?? baseImageDuration;
+      const durationInFrames = Math.max(
+        1,
+        Math.min(contentDuration - start, Math.floor(rawDuration)),
+      );
+      timeline.push({
+        src: item.src,
+        start,
+        durationInFrames,
+        effect: item.effect,
+      });
+      start += durationInFrames;
+    }
+    return timeline;
+  })();
   const perSubtitleDuration =
     resolvedSubtitles.length > 0
       ? Math.max(1, Math.floor(contentDuration / resolvedSubtitles.length))
@@ -141,26 +192,66 @@ export const Main = ({
                   </p>
                 ) : null}
               </div>
-              {resolvedImageArray.length > 0 ? (
+              {imageTimeline.length > 0 ? (
                 <div className="relative w-[420px] h-[260px] rounded-2xl shadow-lg overflow-hidden">
-                  {resolvedImageArray.map((source, index) => {
-                    const isLast = index === resolvedImageArray.length - 1;
-                    const durationInFrames = isLast
-                      ? contentDuration - perImageDuration * index
-                      : perImageDuration;
+                  {imageTimeline.map((item, index) => {
+                    const relativeFrame = frame - contentStart - item.start;
+                    const isSingle = imageTimeline.length === 1;
+                    const effect =
+                      item.effect ?? (isSingle ? resolvedImageEffect : "none");
+                    const fadeDuration =
+                      resolvedTransitionEffect === "fade" &&
+                      imageTimeline.length > 1
+                        ? Math.min(
+                            Math.floor(fps * 0.5),
+                            Math.floor(item.durationInFrames / 2),
+                          )
+                        : 0;
+                    const opacity =
+                      fadeDuration > 0
+                        ? interpolate(
+                            relativeFrame,
+                            [
+                              0,
+                              fadeDuration,
+                              item.durationInFrames - fadeDuration,
+                              item.durationInFrames,
+                            ],
+                            [0, 1, 1, 0],
+                            {
+                              extrapolateLeft: "clamp",
+                              extrapolateRight: "clamp",
+                            },
+                          )
+                        : 1;
+                    const progress =
+                      item.durationInFrames > 0
+                        ? Math.min(
+                            1,
+                            Math.max(0, relativeFrame / item.durationInFrames),
+                          )
+                        : 0;
+                    const scale =
+                      isSingle && effect === "zoom-in"
+                        ? 1 + 0.08 * progress
+                        : isSingle && effect === "zoom-out"
+                          ? 1.08 - 0.08 * progress
+                          : 1;
                     return (
                       <Sequence
-                        key={`${source}-${index}`}
-                        from={index * perImageDuration}
-                        durationInFrames={durationInFrames}
+                        key={`${item.src}-${index}`}
+                        from={item.start}
+                        durationInFrames={item.durationInFrames}
                       >
                         <Img
-                          src={source}
+                          src={item.src}
                           alt="作品素材"
                           className="w-[420px] h-[260px]"
                           style={{
                             objectFit: resolvedFit,
                             objectPosition: resolvedPosition,
+                            opacity,
+                            transform: `scale(${scale})`,
                           }}
                         />
                       </Sequence>
@@ -190,26 +281,66 @@ export const Main = ({
             </div>
           ) : layout === "image-top" ? (
             <div className="flex flex-col items-center gap-6">
-              {resolvedImageArray.length > 0 ? (
+              {imageTimeline.length > 0 ? (
                 <div className="relative w-[520px] h-[300px] rounded-2xl shadow-lg overflow-hidden">
-                  {resolvedImageArray.map((source, index) => {
-                    const isLast = index === resolvedImageArray.length - 1;
-                    const durationInFrames = isLast
-                      ? contentDuration - perImageDuration * index
-                      : perImageDuration;
+                  {imageTimeline.map((item, index) => {
+                    const relativeFrame = frame - contentStart - item.start;
+                    const isSingle = imageTimeline.length === 1;
+                    const effect =
+                      item.effect ?? (isSingle ? resolvedImageEffect : "none");
+                    const fadeDuration =
+                      resolvedTransitionEffect === "fade" &&
+                      imageTimeline.length > 1
+                        ? Math.min(
+                            Math.floor(fps * 0.5),
+                            Math.floor(item.durationInFrames / 2),
+                          )
+                        : 0;
+                    const opacity =
+                      fadeDuration > 0
+                        ? interpolate(
+                            relativeFrame,
+                            [
+                              0,
+                              fadeDuration,
+                              item.durationInFrames - fadeDuration,
+                              item.durationInFrames,
+                            ],
+                            [0, 1, 1, 0],
+                            {
+                              extrapolateLeft: "clamp",
+                              extrapolateRight: "clamp",
+                            },
+                          )
+                        : 1;
+                    const progress =
+                      item.durationInFrames > 0
+                        ? Math.min(
+                            1,
+                            Math.max(0, relativeFrame / item.durationInFrames),
+                          )
+                        : 0;
+                    const scale =
+                      isSingle && effect === "zoom-in"
+                        ? 1 + 0.08 * progress
+                        : isSingle && effect === "zoom-out"
+                          ? 1.08 - 0.08 * progress
+                          : 1;
                     return (
                       <Sequence
-                        key={`${source}-${index}`}
-                        from={index * perImageDuration}
-                        durationInFrames={durationInFrames}
+                        key={`${item.src}-${index}`}
+                        from={item.start}
+                        durationInFrames={item.durationInFrames}
                       >
                         <Img
-                          src={source}
+                          src={item.src}
                           alt="作品素材"
                           className="w-[520px] h-[300px]"
                           style={{
                             objectFit: resolvedFit,
                             objectPosition: resolvedPosition,
+                            opacity,
+                            transform: `scale(${scale})`,
                           }}
                         />
                       </Sequence>
@@ -317,26 +448,66 @@ export const Main = ({
                   {subtitle}
                 </p>
               ) : null}
-              {resolvedImageArray.length > 0 ? (
+              {imageTimeline.length > 0 ? (
                 <div className="relative w-[460px] h-[260px] rounded-2xl shadow-lg overflow-hidden">
-                  {resolvedImageArray.map((source, index) => {
-                    const isLast = index === resolvedImageArray.length - 1;
-                    const durationInFrames = isLast
-                      ? contentDuration - perImageDuration * index
-                      : perImageDuration;
+                  {imageTimeline.map((item, index) => {
+                    const relativeFrame = frame - contentStart - item.start;
+                    const isSingle = imageTimeline.length === 1;
+                    const effect =
+                      item.effect ?? (isSingle ? resolvedImageEffect : "none");
+                    const fadeDuration =
+                      resolvedTransitionEffect === "fade" &&
+                      imageTimeline.length > 1
+                        ? Math.min(
+                            Math.floor(fps * 0.5),
+                            Math.floor(item.durationInFrames / 2),
+                          )
+                        : 0;
+                    const opacity =
+                      fadeDuration > 0
+                        ? interpolate(
+                            relativeFrame,
+                            [
+                              0,
+                              fadeDuration,
+                              item.durationInFrames - fadeDuration,
+                              item.durationInFrames,
+                            ],
+                            [0, 1, 1, 0],
+                            {
+                              extrapolateLeft: "clamp",
+                              extrapolateRight: "clamp",
+                            },
+                          )
+                        : 1;
+                    const progress =
+                      item.durationInFrames > 0
+                        ? Math.min(
+                            1,
+                            Math.max(0, relativeFrame / item.durationInFrames),
+                          )
+                        : 0;
+                    const scale =
+                      isSingle && effect === "zoom-in"
+                        ? 1 + 0.08 * progress
+                        : isSingle && effect === "zoom-out"
+                          ? 1.08 - 0.08 * progress
+                          : 1;
                     return (
                       <Sequence
-                        key={`${source}-${index}`}
-                        from={index * perImageDuration}
-                        durationInFrames={durationInFrames}
+                        key={`${item.src}-${index}`}
+                        from={item.start}
+                        durationInFrames={item.durationInFrames}
                       >
                         <Img
-                          src={source}
+                          src={item.src}
                           alt="作品素材"
                           className="w-[460px] h-[260px]"
                           style={{
                             objectFit: resolvedFit,
                             objectPosition: resolvedPosition,
+                            opacity,
+                            transform: `scale(${scale})`,
                           }}
                         />
                       </Sequence>

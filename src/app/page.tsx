@@ -20,6 +20,13 @@ import { Spacing } from "../components/Spacing";
 import { Tips } from "../components/Tips";
 import { Main } from "../remotion/MyComp/Main";
 
+type ImageSequenceItem = {
+  type: "upload" | "url";
+  mediaId?: string;
+  url?: string;
+  durationInFrames?: number;
+};
+
 type WorkItem = {
   id: string;
   title: string;
@@ -33,6 +40,9 @@ type WorkItem = {
   logoImageMediaId?: string;
   audioMediaId?: string;
   imageMediaIds?: string[];
+  imageSequenceItems?: ImageSequenceItem[];
+  imageEffect?: "none" | "zoom-in" | "zoom-out";
+  transitionEffect?: "none" | "fade";
   coverImageUrl?: string;
   coverVideoUrl?: string;
   logoImageUrl?: string;
@@ -152,11 +162,12 @@ const Home: NextPage = () => {
   const [audioMediaId, setAudioMediaId] = useState<string | undefined>(
     undefined,
   );
-  const [imageMediaIds, setImageMediaIds] = useState<string[]>([]);
   const [audioUrl, setAudioUrl] = useState<string>(
     defaultMyCompProps.audioDataUrl ?? "",
   );
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imageSequenceItems, setImageSequenceItems] = useState<
+    ImageSequenceItem[]
+  >([]);
   const [coverImageObjectUrl, setCoverImageObjectUrl] = useState<
     string | undefined
   >(undefined);
@@ -214,8 +225,19 @@ const Home: NextPage = () => {
     defaultMyCompProps.showRings ?? true,
   );
   const [subtitles, setSubtitles] = useState<string[]>([]);
+  const [imageEffect, setImageEffect] = useState<
+    "none" | "zoom-in" | "zoom-out"
+  >(defaultMyCompProps.imageEffect ?? "none");
+  const [transitionEffect, setTransitionEffect] = useState<"none" | "fade">(
+    defaultMyCompProps.transitionEffect ?? "fade",
+  );
   const [works, setWorks] = useState<WorkItem[]>([]);
   const [selectedWorkId, setSelectedWorkId] = useState<string>("builtin");
+  const imageMediaIds = useMemo(() => {
+    return imageSequenceItems
+      .filter((item) => item.type === "upload" && item.mediaId)
+      .map((item) => item.mediaId as string);
+  }, [imageSequenceItems]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -274,13 +296,17 @@ const Home: NextPage = () => {
       setCoverVideoMediaId(undefined);
       setLogoImageMediaId(undefined);
       setAudioMediaId(undefined);
-      setImageMediaIds([]);
       setCoverImageUrl(defaultMyCompProps.coverImageUrl ?? "");
       setCoverVideoUrl(defaultMyCompProps.coverVideoDataUrl ?? "");
       setLogoImageUrl(defaultMyCompProps.logoImageUrl ?? "");
       setAudioDataUrl(defaultMyCompProps.audioDataUrl);
       setAudioUrl(defaultMyCompProps.audioDataUrl ?? "");
-      setImageUrls(defaultMyCompProps.imageArray ?? []);
+      setImageSequenceItems(
+        (defaultMyCompProps.imageArray ?? []).map((url) => ({
+          type: "url",
+          url,
+        })),
+      );
       setCoverImageObjectUrl(undefined);
       setCoverVideoObjectUrl(undefined);
       setLogoImageObjectUrl(undefined);
@@ -300,10 +326,26 @@ const Home: NextPage = () => {
       setLayout(defaultMyCompProps.layout ?? "center");
       setShowRings(defaultMyCompProps.showRings ?? true);
       setSubtitles(defaultMyCompProps.subtitles ?? []);
+      setImageEffect(defaultMyCompProps.imageEffect ?? "none");
+      setTransitionEffect(defaultMyCompProps.transitionEffect ?? "fade");
       return;
     }
     const selected = availableWorks.find((work) => work.id === selectedWorkId);
     if (selected) {
+      const fallbackImageSequenceItems: ImageSequenceItem[] = [
+        ...(selected.imageMediaIds ?? []).map((mediaId) => ({
+          type: "upload",
+          mediaId,
+        })),
+        ...(selected.imageUrls ?? []).map((url) => ({
+          type: "url",
+          url,
+        })),
+      ];
+      const nextSequenceItems =
+        selected.imageSequenceItems && selected.imageSequenceItems.length > 0
+          ? selected.imageSequenceItems
+          : fallbackImageSequenceItems;
       setText(selected.title);
       setSubtitle(selected.subtitle ?? "");
       setBadgeText(selected.badgeText ?? "");
@@ -314,13 +356,12 @@ const Home: NextPage = () => {
       setCoverVideoMediaId(selected.coverVideoMediaId);
       setLogoImageMediaId(selected.logoImageMediaId);
       setAudioMediaId(selected.audioMediaId);
-      setImageMediaIds(selected.imageMediaIds ?? []);
+      setImageSequenceItems(nextSequenceItems);
       setCoverImageUrl(selected.coverImageUrl ?? "");
       setCoverVideoUrl(selected.coverVideoUrl ?? "");
       setLogoImageUrl(selected.logoImageUrl ?? "");
       setAudioDataUrl(selected.audioDataUrl);
       setAudioUrl(selected.audioUrl ?? "");
-      setImageUrls(selected.imageUrls ?? []);
       setBackgroundColor(selected.backgroundColor);
       setTextColor(selected.textColor);
       setAccentColor(selected.accentColor);
@@ -340,6 +381,8 @@ const Home: NextPage = () => {
       setLayout(selected.layout ?? "center");
       setShowRings(selected.showRings ?? true);
       setSubtitles(selected.subtitles ?? []);
+      setImageEffect(selected.imageEffect ?? "none");
+      setTransitionEffect(selected.transitionEffect ?? "fade");
     }
   }, [availableWorks, selectedWorkId]);
 
@@ -570,11 +613,28 @@ const Home: NextPage = () => {
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [imageMediaIds]);
+  const imageObjectUrlMap = useMemo(() => {
+    const map = new Map<string, string>();
+    imageMediaIds.forEach((mediaId, index) => {
+      const objectUrl = imageObjectUrls[index];
+      if (objectUrl) {
+        map.set(mediaId, objectUrl);
+      }
+    });
+    return map;
+  }, [imageMediaIds, imageObjectUrls]);
+  const imageServerDataUrlMap = useMemo(() => {
+    const map = new Map<string, string>();
+    imageMediaIds.forEach((mediaId, index) => {
+      const dataUrl = imageServerDataUrls[index];
+      if (dataUrl) {
+        map.set(mediaId, dataUrl);
+      }
+    });
+    return map;
+  }, [imageMediaIds, imageServerDataUrls]);
 
   const inputProps: z.infer<typeof CompositionProps> = useMemo(() => {
-    const resolvedImageUrls = imageUrls
-      .map((item) => item.trim())
-      .filter(Boolean);
     const resolvedCoverImage =
       coverImageUrl.trim().length > 0
         ? coverImageUrl.trim()
@@ -591,7 +651,27 @@ const Home: NextPage = () => {
       audioUrl.trim().length > 0
         ? audioUrl.trim()
         : audioObjectUrl ?? audioDataUrl;
-    const resolvedImageArray = [...imageObjectUrls, ...resolvedImageUrls];
+    const resolvedImageSequence = imageSequenceItems
+      .map((item) => {
+        const src =
+          item.type === "upload"
+            ? item.mediaId
+              ? imageObjectUrlMap.get(item.mediaId)
+              : undefined
+            : item.url;
+        if (!src) {
+          return null;
+        }
+        return {
+          src,
+          durationInFrames: item.durationInFrames,
+        };
+      })
+      .filter(Boolean) as Array<{
+      src: string;
+      durationInFrames?: number;
+    }>;
+    const resolvedImageArray = resolvedImageSequence.map((item) => item.src);
     return {
       title: text,
       subtitle: subtitle || undefined,
@@ -599,7 +679,14 @@ const Home: NextPage = () => {
       coverImageDataUrl: resolvedCoverImage,
       coverVideoDataUrl: resolvedCoverVideo,
       logoImageDataUrl: resolvedLogoImage,
-      imageArray: resolvedImageArray.length > 0 ? resolvedImageArray : undefined,
+      imageArray:
+        resolvedImageSequence.length === 0 && resolvedImageArray.length > 0
+          ? resolvedImageArray
+          : undefined,
+      imageSequence:
+        resolvedImageSequence.length > 0 ? resolvedImageSequence : undefined,
+      imageEffect,
+      transitionEffect,
       subtitles: subtitles.length > 0 ? subtitles : undefined,
       audioDataUrl: resolvedAudio,
       backgroundColor,
@@ -628,8 +715,9 @@ const Home: NextPage = () => {
     coverVideoObjectUrl,
     coverVideoUrl,
     coverMediaType,
-    imageObjectUrls,
-    imageUrls,
+    imageEffect,
+    imageObjectUrlMap,
+    imageSequenceItems,
     layout,
     logoImageDataUrl,
     logoImageObjectUrl,
@@ -643,13 +731,11 @@ const Home: NextPage = () => {
     text,
     textColor,
     titleFontSize,
+    transitionEffect,
     durationInFrames,
   ]);
 
   const serverInputProps: z.infer<typeof CompositionProps> = useMemo(() => {
-    const resolvedImageUrls = imageUrls
-      .map((item) => item.trim())
-      .filter(Boolean);
     const resolvedCoverImage =
       coverImageUrl.trim().length > 0
         ? coverImageUrl.trim()
@@ -666,7 +752,27 @@ const Home: NextPage = () => {
       audioUrl.trim().length > 0
         ? audioUrl.trim()
         : audioServerDataUrl ?? audioDataUrl;
-    const resolvedImageArray = [...imageServerDataUrls, ...resolvedImageUrls];
+    const resolvedImageSequence = imageSequenceItems
+      .map((item) => {
+        const src =
+          item.type === "upload"
+            ? item.mediaId
+              ? imageServerDataUrlMap.get(item.mediaId)
+              : undefined
+            : item.url;
+        if (!src) {
+          return null;
+        }
+        return {
+          src,
+          durationInFrames: item.durationInFrames,
+        };
+      })
+      .filter(Boolean) as Array<{
+      src: string;
+      durationInFrames?: number;
+    }>;
+    const resolvedImageArray = resolvedImageSequence.map((item) => item.src);
     return {
       title: text,
       subtitle: subtitle || undefined,
@@ -674,7 +780,14 @@ const Home: NextPage = () => {
       coverImageDataUrl: resolvedCoverImage,
       coverVideoDataUrl: resolvedCoverVideo,
       logoImageDataUrl: resolvedLogoImage,
-      imageArray: resolvedImageArray.length > 0 ? resolvedImageArray : undefined,
+      imageArray:
+        resolvedImageSequence.length === 0 && resolvedImageArray.length > 0
+          ? resolvedImageArray
+          : undefined,
+      imageSequence:
+        resolvedImageSequence.length > 0 ? resolvedImageSequence : undefined,
+      imageEffect,
+      transitionEffect,
       subtitles: subtitles.length > 0 ? subtitles : undefined,
       audioDataUrl: resolvedAudio,
       backgroundColor,
@@ -703,8 +816,9 @@ const Home: NextPage = () => {
     coverVideoServerDataUrl,
     coverVideoUrl,
     coverMediaType,
-    imageServerDataUrls,
-    imageUrls,
+    imageEffect,
+    imageSequenceItems,
+    imageServerDataUrlMap,
     layout,
     logoImageDataUrl,
     logoImageServerDataUrl,
@@ -718,6 +832,7 @@ const Home: NextPage = () => {
     text,
     textColor,
     titleFontSize,
+    transitionEffect,
     durationInFrames,
   ]);
 

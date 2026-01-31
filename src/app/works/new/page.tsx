@@ -19,6 +19,9 @@ type WorkItem = {
   logoImageMediaId?: string;
   audioMediaId?: string;
   imageMediaIds?: string[];
+  imageSequenceItems?: ImageSequenceItem[];
+  imageEffect?: "none" | "zoom-in" | "zoom-out";
+  transitionEffect?: "none" | "fade";
   coverImageUrl?: string;
   coverVideoUrl?: string;
   logoImageUrl?: string;
@@ -39,6 +42,13 @@ type WorkItem = {
   showRings?: boolean;
   addToRenderPage: boolean;
   createdAt: number;
+};
+
+type ImageSequenceItem = {
+  type: "upload" | "url";
+  mediaId?: string;
+  url?: string;
+  durationInFrames?: number;
 };
 
 const STORAGE_KEY = "remotion-works";
@@ -155,7 +165,9 @@ const NewWorkPage = () => {
   const [audioMediaId, setAudioMediaId] = useState<string | undefined>(
     undefined,
   );
-  const [imageMediaIds, setImageMediaIds] = useState<string[]>([]);
+  const [imageSequenceItems, setImageSequenceItems] = useState<
+    ImageSequenceItem[]
+  >([]);
   const [coverImageUrl, setCoverImageUrl] = useState("");
   const [coverVideoUrl, setCoverVideoUrl] = useState("");
   const [logoImageUrl, setLogoImageUrl] = useState("");
@@ -189,10 +201,21 @@ const NewWorkPage = () => {
     "center" | "top" | "bottom" | "left" | "right"
   >("center");
   const [showRings, setShowRings] = useState(true);
+  const [imageEffect, setImageEffect] = useState<
+    "none" | "zoom-in" | "zoom-out"
+  >("none");
+  const [transitionEffect, setTransitionEffect] = useState<"none" | "fade">(
+    "fade",
+  );
   const [addToRenderPage, setAddToRenderPage] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const imageMediaIds = useMemo(() => {
+    return imageSequenceItems
+      .filter((item) => item.type === "upload" && item.mediaId)
+      .map((item) => item.mediaId as string);
+  }, [imageSequenceItems]);
 
   const templates = useMemo(
     () => [
@@ -315,10 +338,12 @@ const NewWorkPage = () => {
     setCoverVideoObjectUrl(undefined);
     setLogoImageObjectUrl(undefined);
     setAudioObjectUrl(undefined);
-    setImageMediaIds([]);
+    setImageSequenceItems([]);
     setImageObjectUrls([]);
     setImageUrlsInput("");
     setSubtitlesText("");
+    setImageEffect("none");
+    setTransitionEffect("fade");
     setSuccess("已套用模板，可继续调整。");
     setError("");
   };
@@ -351,13 +376,33 @@ const NewWorkPage = () => {
     setCoverVideoMediaId(target.coverVideoMediaId);
     setLogoImageMediaId(target.logoImageMediaId);
     setAudioMediaId(target.audioMediaId);
-    setImageMediaIds(target.imageMediaIds ?? []);
+    const fallbackImageSequenceItems: ImageSequenceItem[] = [
+      ...(target.imageMediaIds ?? []).map((mediaId) => ({
+        type: "upload",
+        mediaId,
+      })),
+      ...(target.imageUrls ?? []).map((url) => ({
+        type: "url",
+        url,
+      })),
+    ];
+    const nextSequenceItems =
+      target.imageSequenceItems && target.imageSequenceItems.length > 0
+        ? target.imageSequenceItems
+        : fallbackImageSequenceItems;
+    setImageSequenceItems(nextSequenceItems);
     setCoverImageUrl(target.coverImageUrl ?? "");
     setCoverVideoUrl(target.coverVideoUrl ?? "");
     setLogoImageUrl(target.logoImageUrl ?? "");
     setAudioDataUrl(target.audioDataUrl);
     setAudioUrl(target.audioUrl ?? "");
-    setImageUrlsInput((target.imageUrls ?? []).join("\n"));
+    setImageUrlsInput(
+      nextSequenceItems
+        .filter((item) => item.type === "url")
+        .map((item) => item.url ?? "")
+        .filter(Boolean)
+        .join("\n"),
+    );
     setSubtitlesText((target.subtitles ?? []).join("\n"));
     setTitleFontSize(String(target.titleFontSize ?? 70));
     setSubtitleFontSize(String(target.subtitleFontSize ?? 24));
@@ -366,6 +411,8 @@ const NewWorkPage = () => {
     setMediaFit(target.mediaFit ?? "cover");
     setMediaPosition(target.mediaPosition ?? "center");
     setShowRings(target.showRings ?? true);
+    setImageEffect(target.imageEffect ?? "none");
+    setTransitionEffect(target.transitionEffect ?? "fade");
     setAddToRenderPage(target.addToRenderPage);
   }, [searchParams]);
 
@@ -571,12 +618,6 @@ const NewWorkPage = () => {
   const resolvedTitleFontSize = Number(titleFontSize) || 70;
   const resolvedSubtitleFontSize = Number(subtitleFontSize) || 24;
   const resolvedDurationInFrames = Number(durationInFrames) || DURATION_IN_FRAMES;
-  const resolvedImageUrls = useMemo(() => {
-    return imageUrlsInput
-      .split(/\r?\n|,/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }, [imageUrlsInput]);
   const resolvedCoverImage =
     coverImageUrl.trim().length > 0
       ? coverImageUrl.trim()
@@ -593,9 +634,26 @@ const NewWorkPage = () => {
     audioUrl.trim().length > 0
       ? audioUrl.trim()
       : audioObjectUrl ?? audioDataUrl;
+  const imageObjectUrlMap = useMemo(() => {
+    const map = new Map<string, string>();
+    imageMediaIds.forEach((mediaId, index) => {
+      const objectUrl = imageObjectUrls[index];
+      if (objectUrl) {
+        map.set(mediaId, objectUrl);
+      }
+    });
+    return map;
+  }, [imageMediaIds, imageObjectUrls]);
   const resolvedImageArray = useMemo(() => {
-    return [...imageObjectUrls, ...resolvedImageUrls];
-  }, [imageObjectUrls, resolvedImageUrls]);
+    return imageSequenceItems
+      .map((item) => {
+        if (item.type === "upload") {
+          return item.mediaId ? imageObjectUrlMap.get(item.mediaId) : undefined;
+        }
+        return item.url?.trim();
+      })
+      .filter(Boolean) as string[];
+  }, [imageObjectUrlMap, imageSequenceItems]);
   const previewMediaType =
     resolvedImageArray.length > 0
       ? "multi-image"
@@ -727,8 +785,6 @@ const NewWorkPage = () => {
     async (e) => {
       const files = Array.from(e.currentTarget.files ?? []);
       if (files.length === 0) {
-        setImageMediaIds([]);
-        setImageObjectUrls([]);
         return;
       }
       try {
@@ -737,13 +793,87 @@ const NewWorkPage = () => {
           const mediaId = await storeMediaBlob(file);
           mediaIds.push(mediaId);
         }
-        setImageMediaIds(mediaIds);
+        const uploadItems = mediaIds.map((mediaId) => ({
+          type: "upload" as const,
+          mediaId,
+          durationInFrames: 30,
+        }));
+        setImageSequenceItems((prev) => [...prev, ...uploadItems]);
       } catch {
         setError("多图素材保存失败，请改用链接或更小的文件。");
-        setImageMediaIds([]);
+        setImageSequenceItems((prev) =>
+          prev.filter((item) => item.type !== "upload"),
+        );
         setImageObjectUrls([]);
       }
     };
+  const syncImageUrlsInput = (items: ImageSequenceItem[]) => {
+    const nextInput = items
+      .filter((item) => item.type === "url")
+      .map((item) => item.url ?? "")
+      .filter(Boolean)
+      .join("\n");
+    setImageUrlsInput(nextInput);
+  };
+  const handleImageUrlsInputChange = (value: string) => {
+    setImageUrlsInput(value);
+    const urls = value
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    setImageSequenceItems((prev) => {
+      const next: ImageSequenceItem[] = [];
+      let urlIndex = 0;
+      for (const item of prev) {
+        if (item.type === "url") {
+          if (urlIndex < urls.length) {
+            next.push({
+              ...item,
+              url: urls[urlIndex],
+            });
+            urlIndex += 1;
+          }
+        } else {
+          next.push(item);
+        }
+      }
+      for (; urlIndex < urls.length; urlIndex += 1) {
+        next.push({ type: "url", url: urls[urlIndex] });
+      }
+      return next;
+    });
+  };
+  const moveImageSequenceItem = (fromIndex: number, toIndex: number) => {
+    setImageSequenceItems((prev) => {
+      if (toIndex < 0 || toIndex >= prev.length) {
+        return prev;
+      }
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      syncImageUrlsInput(next);
+      return next;
+    });
+  };
+  const removeImageSequenceItem = (index: number) => {
+    setImageSequenceItems((prev) => {
+      const next = prev.filter((_, itemIndex) => itemIndex !== index);
+      syncImageUrlsInput(next);
+      return next;
+    });
+  };
+  const updateImageSequenceItem = (
+    index: number,
+    updates: Partial<ImageSequenceItem>,
+  ) => {
+    setImageSequenceItems((prev) => {
+      const next = prev.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...updates } : item,
+      );
+      syncImageUrlsInput(next);
+      return next;
+    });
+  };
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
@@ -770,6 +900,30 @@ const NewWorkPage = () => {
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean);
+    const normalizedImageSequenceItems = imageSequenceItems
+      .map((item) => {
+        if (item.type === "url") {
+          const url = item.url?.trim();
+          if (!url) {
+            return null;
+          }
+          return {
+            ...item,
+            url,
+          };
+        }
+        if (!item.mediaId) {
+          return null;
+        }
+        return item;
+      })
+      .filter(Boolean) as ImageSequenceItem[];
+    const resolvedImageMediaIds = normalizedImageSequenceItems
+      .filter((item) => item.type === "upload")
+      .map((item) => item.mediaId as string);
+    const resolvedImageUrlsFromItems = normalizedImageSequenceItems
+      .filter((item) => item.type === "url")
+      .map((item) => item.url as string);
 
     const works = readWorks();
     if (editingId) {
@@ -787,13 +941,25 @@ const NewWorkPage = () => {
               coverVideoMediaId,
               logoImageMediaId,
               audioMediaId,
-              imageMediaIds: imageMediaIds.length > 0 ? imageMediaIds : undefined,
+              imageMediaIds:
+                resolvedImageMediaIds.length > 0
+                  ? resolvedImageMediaIds
+                  : undefined,
+              imageSequenceItems:
+                normalizedImageSequenceItems.length > 0
+                  ? normalizedImageSequenceItems
+                  : undefined,
+              imageEffect,
+              transitionEffect,
               coverImageUrl: coverImageUrl.trim() || undefined,
               coverVideoUrl: coverVideoUrl.trim() || undefined,
               logoImageUrl: logoImageUrl.trim() || undefined,
               audioDataUrl,
               audioUrl: audioUrl.trim() || undefined,
-              imageUrls: resolvedImageUrls.length > 0 ? resolvedImageUrls : undefined,
+              imageUrls:
+                resolvedImageUrlsFromItems.length > 0
+                  ? resolvedImageUrlsFromItems
+                  : undefined,
               subtitles: resolvedSubtitles.length > 0 ? resolvedSubtitles : undefined,
               backgroundColor,
               textColor,
@@ -836,13 +1002,23 @@ const NewWorkPage = () => {
       coverVideoMediaId,
       logoImageMediaId,
       audioMediaId,
-      imageMediaIds: imageMediaIds.length > 0 ? imageMediaIds : undefined,
+      imageMediaIds:
+        resolvedImageMediaIds.length > 0 ? resolvedImageMediaIds : undefined,
+      imageSequenceItems:
+        normalizedImageSequenceItems.length > 0
+          ? normalizedImageSequenceItems
+          : undefined,
+      imageEffect,
+      transitionEffect,
       coverImageUrl: coverImageUrl.trim() || undefined,
       coverVideoUrl: coverVideoUrl.trim() || undefined,
       logoImageUrl: logoImageUrl.trim() || undefined,
       audioDataUrl,
       audioUrl: audioUrl.trim() || undefined,
-      imageUrls: resolvedImageUrls.length > 0 ? resolvedImageUrls : undefined,
+      imageUrls:
+        resolvedImageUrlsFromItems.length > 0
+          ? resolvedImageUrlsFromItems
+          : undefined,
       subtitles: resolvedSubtitles.length > 0 ? resolvedSubtitles : undefined,
       backgroundColor,
       textColor,
@@ -1103,7 +1279,7 @@ const NewWorkPage = () => {
           <textarea
             className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none min-h-[96px]"
             value={imageUrlsInput}
-            onChange={(e) => setImageUrlsInput(e.currentTarget.value)}
+            onChange={(e) => handleImageUrlsInputChange(e.currentTarget.value)}
             placeholder="https://...&#10;https://..."
           />
         </label>
@@ -1116,6 +1292,145 @@ const NewWorkPage = () => {
             multiple
             onChange={handleMultiImageChange}
           />
+        </label>
+        {imageSequenceItems.length > 0 ? (
+          <div className="flex flex-col gap-3 text-sm text-foreground">
+            <div className="font-medium text-foreground">多图素材列表</div>
+            <div className="flex flex-col gap-3">
+              {imageSequenceItems.map((item, index) => {
+                const previewSrc =
+                  item.type === "upload"
+                    ? item.mediaId
+                      ? imageObjectUrlMap.get(item.mediaId)
+                      : undefined
+                    : item.url;
+                return (
+                  <div
+                    key={`${item.type}-${item.mediaId ?? item.url ?? index}`}
+                    className="flex flex-col gap-2 border border-unfocused-border-color rounded-geist p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      {previewSrc ? (
+                        <Image
+                          src={previewSrc}
+                          alt="多图素材预览"
+                          width={96}
+                          height={64}
+                          className="w-[96px] h-[64px] rounded-md object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="w-[96px] h-[64px] rounded-md bg-muted flex items-center justify-center text-xs text-subtitle">
+                          无预览
+                        </div>
+                      )}
+                      <div className="flex-1 flex flex-col gap-2">
+                        {item.type === "url" ? (
+                          <input
+                            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+                            value={item.url ?? ""}
+                            onChange={(e) =>
+                              updateImageSequenceItem(index, {
+                                url: e.currentTarget.value,
+                              })
+                            }
+                            placeholder="https://..."
+                          />
+                        ) : (
+                          <div className="text-xs text-subtitle">
+                            上传素材
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-subtitle">
+                            显示帧数
+                          </span>
+                          <input
+                            className="leading-[1.7] w-24 rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+                            type="number"
+                            min={1}
+                            value={
+                              item.durationInFrames !== undefined
+                                ? item.durationInFrames
+                                : ""
+                            }
+                            onChange={(e) => {
+                              const value = e.currentTarget.value;
+                              const duration = value
+                                ? Number(value)
+                                : undefined;
+                              updateImageSequenceItem(index, {
+                                durationInFrames:
+                                  duration && duration > 0
+                                    ? duration
+                                    : undefined,
+                              });
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-xs border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
+                        onClick={() => moveImageSequenceItem(index, index - 1)}
+                        disabled={index === 0}
+                      >
+                        上移
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
+                        onClick={() => moveImageSequenceItem(index, index + 1)}
+                        disabled={index === imageSequenceItems.length - 1}
+                      >
+                        下移
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color text-geist-error"
+                        onClick={() => removeImageSequenceItem(index)}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          单图特效
+          <select
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={imageEffect}
+            onChange={(e) =>
+              setImageEffect(
+                e.currentTarget.value as "none" | "zoom-in" | "zoom-out",
+              )
+            }
+          >
+            <option value="none">无特效</option>
+            <option value="zoom-in">轻微放大</option>
+            <option value="zoom-out">轻微缩小</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          多图过渡
+          <select
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+            value={transitionEffect}
+            onChange={(e) =>
+              setTransitionEffect(
+                e.currentTarget.value as "none" | "fade",
+              )
+            }
+          >
+            <option value="fade">淡入淡出</option>
+            <option value="none">无过渡</option>
+          </select>
         </label>
         <label className="flex flex-col gap-2 text-sm text-foreground">
           视频素材链接

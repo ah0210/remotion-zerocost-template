@@ -1,6 +1,9 @@
 import { z } from "zod";
 export const COMP_NAME = "MyComp";
 
+const ImageEffect = z.enum(["none", "zoom-in", "zoom-out"]);
+const TransitionEffect = z.enum(["none", "fade"]);
+
 export const CompositionProps = z.object({
   title: z.string(),
   subtitle: z.string().optional(),
@@ -9,6 +12,18 @@ export const CompositionProps = z.object({
   coverVideoDataUrl: z.string().optional(),
   logoImageDataUrl: z.string().optional(),
   imageArray: z.array(z.string()).optional(),
+  imageSequence: z
+    .array(
+      z.object({
+        src: z.string(),
+        durationInFrames: z.number().optional(),
+        effect: ImageEffect.optional(),
+      }),
+    )
+    .optional(),
+  imageEffect: ImageEffect.optional(),
+  transitionEffect: TransitionEffect.optional(),
+  imageDurationInFrames: z.number().optional(),
   subtitles: z.array(z.string()).optional(),
   backgroundColor: z.string().optional(),
   textColor: z.string().optional(),
@@ -29,6 +44,10 @@ export const defaultMyCompProps: z.infer<typeof CompositionProps> = {
   subtitle: "用你自己的素材快速生成视频",
   badgeText: "新作品",
   imageArray: [],
+  imageSequence: [],
+  imageEffect: "none",
+  transitionEffect: "fade",
+  imageDurationInFrames: 30,
   subtitles: [],
   backgroundColor: "#ffffff",
   textColor: "#111827",
