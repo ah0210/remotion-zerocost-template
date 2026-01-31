@@ -56,8 +56,6 @@ export const Main = ({
 
   const transitionStart = 2 * fps;
   const transitionDuration = 1 * fps;
-  const contentStart = transitionStart + transitionDuration / 2;
-  const contentDuration = Math.max(1, durationInFrames - contentStart);
   const resolvedTitleSize =
     titleFontSize ?? (layout === "center" ? 70 : 64);
   const resolvedSubtitleSize = subtitleFontSize ?? 24;
@@ -117,10 +115,6 @@ export const Main = ({
   const hasSubtitle = Boolean(resolvedSubtitle);
   const showTitleInCover =
     resolvedTitleDisplayFrames > 0 && frame < resolvedTitleDisplayFrames;
-  const showTitleInContent =
-    resolvedTitleDisplayFrames > 0 &&
-    frame >= contentStart &&
-    frame < contentStart + resolvedTitleDisplayFrames;
 
   const logoOut = spring({
     fps,
@@ -132,55 +126,18 @@ export const Main = ({
     delay: transitionStart,
   });
 
-  const resolvedImageItems =
-    resolvedImageSequence.length > 0
-      ? resolvedImageSequence
-      : resolvedImageArray.map((src) => ({
-          src,
-          durationInFrames: imageDurationInFrames,
-          effect: resolvedImageEffect,
-        }));
-  const baseImageDuration =
-    imageDurationInFrames && imageDurationInFrames > 0
-      ? imageDurationInFrames
-      : resolvedImageItems.length > 0
-        ? Math.max(1, Math.floor(contentDuration / resolvedImageItems.length))
-        : 0;
-  const imageTimeline = (() => {
-    const timeline: Array<{
-      src: string;
-      start: number;
-      durationInFrames: number;
-      effect?: "none" | "zoom-in" | "zoom-out";
-    }> = [];
-    let start = 0;
-    for (const item of resolvedImageItems) {
-      if (start >= contentDuration) {
-        break;
-      }
-      const rawDuration = item.durationInFrames ?? baseImageDuration;
-      const durationInFrames = Math.max(
-        1,
-        Math.min(contentDuration - start, Math.floor(rawDuration)),
-      );
-      timeline.push({
-        src: item.src,
-        start,
-        durationInFrames,
-        effect: item.effect,
-      });
-      start += durationInFrames;
-    }
-    return timeline;
-  })();
+  const fallbackItemDuration = Math.max(1, Math.floor(imageDurationInFrames ?? fps));
+  const normalizeDuration = (value: number | undefined, fallback: number) => {
+    const duration = value ? Math.floor(value) : 0;
+    return duration > 0 ? duration : fallback;
+  };
   const buildTimeline = (
     items: Array<{ src: string; durationInFrames?: number }>,
-    totalDuration: number,
+    fallbackDuration: number,
   ) => {
     if (items.length === 0) {
       return [];
     }
-    const baseDuration = Math.max(1, Math.floor(totalDuration / items.length));
     const timeline: Array<{
       src: string;
       start: number;
@@ -188,13 +145,9 @@ export const Main = ({
     }> = [];
     let start = 0;
     for (const item of items) {
-      if (start >= totalDuration) {
-        break;
-      }
-      const rawDuration = item.durationInFrames ?? baseDuration;
-      const durationInFrames = Math.max(
-        1,
-        Math.min(totalDuration - start, Math.floor(rawDuration)),
+      const durationInFrames = normalizeDuration(
+        item.durationInFrames,
+        fallbackDuration,
       );
       timeline.push({
         src: item.src,
@@ -205,29 +158,116 @@ export const Main = ({
     }
     return timeline;
   };
-  const coverImageTimeline = buildTimeline(
+  const resolvedImageItems =
+    resolvedImageSequence.length > 0
+      ? resolvedImageSequence
+      : resolvedImageArray.map((src) => ({
+          src,
+          durationInFrames: imageDurationInFrames,
+          effect: resolvedImageEffect,
+        }));
+  const resolvedCoverImageItems =
     resolvedCoverImageSequence.length > 0
       ? resolvedCoverImageSequence
       : resolvedCoverImageSource
-        ? [{ src: resolvedCoverImageSource }]
-        : [],
-    durationInFrames,
-  );
-  const coverVideoTimeline = buildTimeline(
+        ? [{ src: resolvedCoverImageSource, durationInFrames: undefined }]
+        : [];
+  const resolvedVideoItems =
     resolvedCoverVideoSequence.length > 0
       ? resolvedCoverVideoSequence
       : resolvedCoverVideoSource
-        ? [{ src: resolvedCoverVideoSource }]
-        : [],
-    durationInFrames,
+        ? [{ src: resolvedCoverVideoSource, durationInFrames: undefined }]
+        : [];
+  const useCoverVideo =
+    resolvedCoverImageItems.length === 0 &&
+    (resolvedMediaType === "video" || resolvedMediaType === "mixed") &&
+    resolvedVideoItems.length > 0;
+  const coverVideoItems = useCoverVideo ? [resolvedVideoItems[0]] : [];
+  const contentVideoItems = useCoverVideo
+    ? resolvedVideoItems.slice(1)
+    : resolvedVideoItems;
+  const coverItems =
+    resolvedCoverImageItems.length > 0 ? resolvedCoverImageItems : coverVideoItems;
+  const coverContentType =
+    resolvedCoverImageItems.length > 0
+      ? "image"
+      : coverVideoItems.length > 0
+        ? "video"
+        : null;
+  const coverTimeline = buildTimeline(coverItems, fallbackItemDuration);
+  const coverDuration =
+    coverTimeline.length > 0
+      ? coverTimeline[coverTimeline.length - 1].start +
+        coverTimeline[coverTimeline.length - 1].durationInFrames
+      : 0;
+  const coverDisplayDuration = Math.max(
+    0,
+    Math.floor(
+      resolvedTitleDisplayFrames > 0
+        ? Math.max(resolvedTitleDisplayFrames, coverDuration)
+        : coverDuration,
+    ),
   );
+  const contentStart = coverDisplayDuration;
+  const showTitleInContent =
+    resolvedTitleDisplayFrames > 0 &&
+    frame >= contentStart &&
+    frame < contentStart + resolvedTitleDisplayFrames;
+  const contentTimeline = (() => {
+    const timeline: Array<{
+      src: string;
+      start: number;
+      durationInFrames: number;
+      type: "image" | "video";
+      effect?: "none" | "zoom-in" | "zoom-out";
+    }> = [];
+    let start = 0;
+    const items: Array<{
+      type: "image" | "video";
+      src: string;
+      durationInFrames?: number;
+      effect?: "none" | "zoom-in" | "zoom-out";
+    }> = [
+      ...resolvedImageItems.map((item) => ({
+        type: "image" as const,
+        src: item.src,
+        durationInFrames: item.durationInFrames,
+        effect: item.effect,
+      })),
+      ...contentVideoItems.map((item) => ({
+        type: "video" as const,
+        src: item.src,
+        durationInFrames: item.durationInFrames,
+      })),
+    ];
+    for (const item of items) {
+      const durationInFrames = normalizeDuration(
+        item.durationInFrames,
+        fallbackItemDuration,
+      );
+      timeline.push({
+        src: item.src,
+        start,
+        durationInFrames,
+        type: item.type,
+        effect: item.effect,
+      });
+      start += durationInFrames;
+    }
+    return timeline;
+  })();
+  const contentDuration =
+    contentTimeline.length > 0
+      ? contentTimeline[contentTimeline.length - 1].start +
+        contentTimeline[contentTimeline.length - 1].durationInFrames
+      : Math.max(0, durationInFrames - contentStart);
   const audioTimeline = buildTimeline(
     resolvedAudioSequence.length > 0
       ? resolvedAudioSequence
       : audioDataUrl
         ? [{ src: audioDataUrl }]
         : [],
-    durationInFrames,
+    fallbackItemDuration,
   );
   const resolveTimelineSrc = (
     timeline: Array<{ src: string; start: number; durationInFrames: number }>,
@@ -240,9 +280,13 @@ export const Main = ({
     return timeline.length > 0 ? timeline[timeline.length - 1].src : undefined;
   };
   const resolvedCoverImage =
-    resolveTimelineSrc(coverImageTimeline) ?? resolvedCoverImageSource;
+    coverContentType === "image" ? resolveTimelineSrc(coverTimeline) : undefined;
   const resolvedCoverVideo =
-    resolveTimelineSrc(coverVideoTimeline) ?? resolvedCoverVideoSource;
+    coverContentType === "video" ? resolveTimelineSrc(coverTimeline) : undefined;
+  const shouldShowCoverVideo =
+    coverContentType === "video" && Boolean(resolvedCoverVideo);
+  const shouldShowCoverImage =
+    coverContentType === "image" && Boolean(resolvedCoverImage);
   const perSubtitleDuration =
     resolvedSubtitles.length > 0
       ? Math.max(1, Math.floor(contentDuration / resolvedSubtitles.length))
@@ -255,6 +299,32 @@ export const Main = ({
         backgroundColor: backgroundColor ?? "#ffffff",
       }}
     >
+      {coverDisplayDuration > 0 ? (
+        <Sequence durationInFrames={coverDisplayDuration}>
+          <AbsoluteFill>
+            {shouldShowCoverVideo && resolvedCoverVideo ? (
+              <Video
+                src={resolvedCoverVideo}
+                className="absolute inset-0 w-full h-full"
+                style={{
+                  objectFit: resolvedFit,
+                  objectPosition: resolvedPosition,
+                }}
+              />
+            ) : shouldShowCoverImage && resolvedCoverImage ? (
+              <Img
+                src={resolvedCoverImage}
+                alt="封面素材"
+                className="absolute inset-0 w-full h-full"
+                style={{
+                  objectFit: resolvedFit,
+                  objectPosition: resolvedPosition,
+                }}
+              />
+            ) : null}
+          </AbsoluteFill>
+        </Sequence>
+      ) : null}
       {showRings ? (
         <Sequence durationInFrames={transitionStart + transitionDuration}>
           <Rings outProgress={logoOut} accentColor={accentColor}></Rings>
@@ -310,28 +380,18 @@ export const Main = ({
                   </p>
                 ) : null}
               </div>
-              {imageTimeline.length > 0 ||
-              ((resolvedMediaType === "video" || resolvedMediaType === "mixed") &&
-                resolvedCoverVideo) ? (
+              {contentTimeline.length > 0 ? (
                 <div className="relative w-[420px] h-[260px] rounded-2xl shadow-lg overflow-hidden">
-                  {resolvedMediaType === "mixed" && resolvedCoverVideo ? (
-                    <Video
-                      src={resolvedCoverVideo}
-                      className="absolute inset-0 w-full h-full"
-                      style={{
-                        objectFit: resolvedFit,
-                        objectPosition: resolvedPosition,
-                      }}
-                    />
-                  ) : null}
-                  {imageTimeline.map((item, index) => {
+                  {contentTimeline.map((item, index) => {
                     const relativeFrame = frame - contentStart - item.start;
-                    const isSingle = imageTimeline.length === 1;
+                    const isSingle = contentTimeline.length === 1;
                     const effect =
-                      item.effect ?? (isSingle ? resolvedImageEffect : "none");
+                      item.type === "image"
+                        ? item.effect ?? (isSingle ? resolvedImageEffect : "none")
+                        : "none";
                     const fadeDuration =
                       resolvedTransitionEffect === "fade" &&
-                      imageTimeline.length > 1
+                      contentTimeline.length > 1
                         ? Math.min(
                             Math.floor(fps * 0.5),
                             Math.floor(item.durationInFrames / 2),
@@ -367,94 +427,61 @@ export const Main = ({
                           )
                         : 0;
                     const scale =
-                      isSingle && effect === "zoom-in"
+                      item.type === "image" && isSingle && effect === "zoom-in"
                         ? 1 + 0.08 * progress
-                        : isSingle && effect === "zoom-out"
+                        : item.type === "image" && isSingle && effect === "zoom-out"
                           ? 1.08 - 0.08 * progress
                           : 1;
                     return (
                       <Sequence
-                        key={`${item.src}-${index}`}
+                        key={`${item.type}-${item.src}-${index}`}
                         from={item.start}
                         durationInFrames={item.durationInFrames}
                       >
-                        <Img
-                          src={item.src}
-                          alt="作品素材"
-                          className="w-[420px] h-[260px] relative"
-                          style={{
-                            objectFit: resolvedFit,
-                            objectPosition: resolvedPosition,
-                            opacity,
-                            transform: `scale(${scale})`,
-                          }}
-                        />
+                        {item.type === "video" ? (
+                          <Video
+                            src={item.src}
+                            className="w-[420px] h-[260px] relative"
+                            style={{
+                              objectFit: resolvedFit,
+                              objectPosition: resolvedPosition,
+                              opacity,
+                              transform: `scale(${scale})`,
+                            }}
+                          />
+                        ) : (
+                          <Img
+                            src={item.src}
+                            alt="作品素材"
+                            className="w-[420px] h-[260px] relative"
+                            style={{
+                              objectFit: resolvedFit,
+                              objectPosition: resolvedPosition,
+                              opacity,
+                              transform: `scale(${scale})`,
+                            }}
+                          />
+                        )}
                       </Sequence>
                     );
                   })}
-                  {imageTimeline.length === 0 &&
-                  resolvedMediaType !== "mixed" &&
-                  resolvedMediaType === "video" &&
-                  resolvedCoverVideo ? (
-                    <Video
-                      src={resolvedCoverVideo}
-                      className="absolute inset-0 w-full h-full"
-                      style={{
-                        objectFit: resolvedFit,
-                        objectPosition: resolvedPosition,
-                      }}
-                    />
-                  ) : null}
-                  {imageTimeline.length === 0 &&
-                  (resolvedMediaType !== "video" || !resolvedCoverVideo) &&
-                  resolvedCoverImage ? (
-                    <Img
-                      src={resolvedCoverImage}
-                      alt="作品素材"
-                      className="absolute inset-0 w-full h-full"
-                      style={{
-                        objectFit: resolvedFit,
-                        objectPosition: resolvedPosition,
-                      }}
-                    />
-                  ) : null}
                 </div>
-              ) : resolvedCoverImage ? (
-                <Img
-                  src={resolvedCoverImage}
-                  alt="作品素材"
-                  className="w-[420px] h-[260px] rounded-2xl shadow-lg"
-                  style={{
-                    objectFit: resolvedFit,
-                    objectPosition: resolvedPosition,
-                  }}
-                />
               ) : null}
             </div>
           ) : layout === "image-top" ? (
             <div className="flex flex-col items-center gap-6">
-              {imageTimeline.length > 0 ||
-              ((resolvedMediaType === "video" || resolvedMediaType === "mixed") &&
-                resolvedCoverVideo) ? (
+              {contentTimeline.length > 0 ? (
                 <div className="relative w-[520px] h-[300px] rounded-2xl shadow-lg overflow-hidden">
-                  {resolvedMediaType === "mixed" && resolvedCoverVideo ? (
-                    <Video
-                      src={resolvedCoverVideo}
-                      className="absolute inset-0 w-full h-full"
-                      style={{
-                        objectFit: resolvedFit,
-                        objectPosition: resolvedPosition,
-                      }}
-                    />
-                  ) : null}
-                  {imageTimeline.map((item, index) => {
+                  {contentTimeline.map((item, index) => {
                     const relativeFrame = frame - contentStart - item.start;
-                    const isSingle = imageTimeline.length === 1;
+                    const isSingle = contentTimeline.length === 1;
                     const effect =
-                      item.effect ?? (isSingle ? resolvedImageEffect : "none");
+                      item.type === "image"
+                        ? item.effect ?? (isSingle ? resolvedImageEffect : "none")
+                        : "none";
                     const fadeDuration =
                       resolvedTransitionEffect === "fade" &&
-                      imageTimeline.length > 1
+                      contentTimeline.length > 1
                         ? Math.min(
                             Math.floor(fps * 0.5),
                             Math.floor(item.durationInFrames / 2),
@@ -490,68 +517,45 @@ export const Main = ({
                           )
                         : 0;
                     const scale =
-                      isSingle && effect === "zoom-in"
+                      item.type === "image" && isSingle && effect === "zoom-in"
                         ? 1 + 0.08 * progress
-                        : isSingle && effect === "zoom-out"
+                        : item.type === "image" && isSingle && effect === "zoom-out"
                           ? 1.08 - 0.08 * progress
                           : 1;
                     return (
                       <Sequence
-                        key={`${item.src}-${index}`}
+                        key={`${item.type}-${item.src}-${index}`}
                         from={item.start}
                         durationInFrames={item.durationInFrames}
                       >
-                        <Img
-                          src={item.src}
-                          alt="作品素材"
-                          className="w-[520px] h-[300px] relative"
-                          style={{
-                            objectFit: resolvedFit,
-                            objectPosition: resolvedPosition,
-                            opacity,
-                            transform: `scale(${scale})`,
-                          }}
-                        />
+                        {item.type === "video" ? (
+                          <Video
+                            src={item.src}
+                            className="w-[520px] h-[300px] relative"
+                            style={{
+                              objectFit: resolvedFit,
+                              objectPosition: resolvedPosition,
+                              opacity,
+                              transform: `scale(${scale})`,
+                            }}
+                          />
+                        ) : (
+                          <Img
+                            src={item.src}
+                            alt="作品素材"
+                            className="w-[520px] h-[300px] relative"
+                            style={{
+                              objectFit: resolvedFit,
+                              objectPosition: resolvedPosition,
+                              opacity,
+                              transform: `scale(${scale})`,
+                            }}
+                          />
+                        )}
                       </Sequence>
                     );
                   })}
-                  {imageTimeline.length === 0 &&
-                  resolvedMediaType !== "mixed" &&
-                  resolvedMediaType === "video" &&
-                  resolvedCoverVideo ? (
-                    <Video
-                      src={resolvedCoverVideo}
-                      className="absolute inset-0 w-full h-full"
-                      style={{
-                        objectFit: resolvedFit,
-                        objectPosition: resolvedPosition,
-                      }}
-                    />
-                  ) : null}
-                  {imageTimeline.length === 0 &&
-                  (resolvedMediaType !== "video" || !resolvedCoverVideo) &&
-                  resolvedCoverImage ? (
-                    <Img
-                      src={resolvedCoverImage}
-                      alt="作品素材"
-                      className="absolute inset-0 w-full h-full"
-                      style={{
-                        objectFit: resolvedFit,
-                        objectPosition: resolvedPosition,
-                      }}
-                    />
-                  ) : null}
                 </div>
-              ) : resolvedCoverImage ? (
-                <Img
-                  src={resolvedCoverImage}
-                  alt="作品素材"
-                  className="w-[520px] h-[300px] rounded-2xl shadow-lg"
-                  style={{
-                    objectFit: resolvedFit,
-                    objectPosition: resolvedPosition,
-                  }}
-                />
               ) : null}
               {badgeText ? (
                 <span
@@ -597,36 +601,18 @@ export const Main = ({
             </div>
           ) : layout === "full-screen" ? (
             <div className="relative w-full h-full">
-              {resolvedMediaType === "video" && resolvedCoverVideo ? (
-                <Video
-                  src={resolvedCoverVideo}
-                  className="absolute inset-0 w-full h-full"
-                  style={{
-                    objectFit: resolvedFit,
-                    objectPosition: resolvedPosition,
-                  }}
-                />
-              ) : null}
-              {resolvedMediaType === "mixed" && resolvedCoverVideo ? (
-                <Video
-                  src={resolvedCoverVideo}
-                  className="absolute inset-0 w-full h-full"
-                  style={{
-                    objectFit: resolvedFit,
-                    objectPosition: resolvedPosition,
-                  }}
-                />
-              ) : null}
-              {imageTimeline.length > 0 ? (
+              {contentTimeline.length > 0 ? (
                 <div className="absolute inset-0">
-                  {imageTimeline.map((item, index) => {
+                  {contentTimeline.map((item, index) => {
                     const relativeFrame = frame - contentStart - item.start;
-                    const isSingle = imageTimeline.length === 1;
+                    const isSingle = contentTimeline.length === 1;
                     const effect =
-                      item.effect ?? (isSingle ? resolvedImageEffect : "none");
+                      item.type === "image"
+                        ? item.effect ?? (isSingle ? resolvedImageEffect : "none")
+                        : "none";
                     const fadeDuration =
                       resolvedTransitionEffect === "fade" &&
-                      imageTimeline.length > 1
+                      contentTimeline.length > 1
                         ? Math.min(
                             Math.floor(fps * 0.5),
                             Math.floor(item.durationInFrames / 2),
@@ -662,42 +648,45 @@ export const Main = ({
                           )
                         : 0;
                     const scale =
-                      isSingle && effect === "zoom-in"
+                      item.type === "image" && isSingle && effect === "zoom-in"
                         ? 1 + 0.08 * progress
-                        : isSingle && effect === "zoom-out"
+                        : item.type === "image" && isSingle && effect === "zoom-out"
                           ? 1.08 - 0.08 * progress
                           : 1;
                     return (
                       <Sequence
-                        key={`${item.src}-${index}`}
+                        key={`${item.type}-${item.src}-${index}`}
                         from={item.start}
                         durationInFrames={item.durationInFrames}
                       >
-                        <Img
-                          src={item.src}
-                          alt="作品素材"
-                          className="absolute inset-0 w-full h-full"
-                          style={{
-                            objectFit: resolvedFit,
-                            objectPosition: resolvedPosition,
-                            opacity,
-                            transform: `scale(${scale})`,
-                          }}
-                        />
+                        {item.type === "video" ? (
+                          <Video
+                            src={item.src}
+                            className="absolute inset-0 w-full h-full"
+                            style={{
+                              objectFit: resolvedFit,
+                              objectPosition: resolvedPosition,
+                              opacity,
+                              transform: `scale(${scale})`,
+                            }}
+                          />
+                        ) : (
+                          <Img
+                            src={item.src}
+                            alt="作品素材"
+                            className="absolute inset-0 w-full h-full"
+                            style={{
+                              objectFit: resolvedFit,
+                              objectPosition: resolvedPosition,
+                              opacity,
+                              transform: `scale(${scale})`,
+                            }}
+                          />
+                        )}
                       </Sequence>
                     );
                   })}
                 </div>
-              ) : resolvedMediaType === "image" && resolvedCoverImage ? (
-                <Img
-                  src={resolvedCoverImage}
-                  alt="作品素材"
-                  className="absolute inset-0 w-full h-full"
-                  style={{
-                    objectFit: resolvedFit,
-                    objectPosition: resolvedPosition,
-                  }}
-                />
               ) : null}
               {showTitleInContent && (hasTitle || hasSubtitle) ? (
                 <AbsoluteFill className="items-center justify-center">
@@ -790,26 +779,18 @@ export const Main = ({
                   {resolvedSubtitle}
                 </p>
               ) : null}
-              {imageTimeline.length > 0 ? (
+              {contentTimeline.length > 0 ? (
                 <div className="relative w-[460px] h-[260px] rounded-2xl shadow-lg overflow-hidden">
-                  {resolvedMediaType === "mixed" && resolvedCoverVideo ? (
-                    <Video
-                      src={resolvedCoverVideo}
-                      className="absolute inset-0 w-full h-full"
-                      style={{
-                        objectFit: resolvedFit,
-                        objectPosition: resolvedPosition,
-                      }}
-                    />
-                  ) : null}
-                  {imageTimeline.map((item, index) => {
+                  {contentTimeline.map((item, index) => {
                     const relativeFrame = frame - contentStart - item.start;
-                    const isSingle = imageTimeline.length === 1;
+                    const isSingle = contentTimeline.length === 1;
                     const effect =
-                      item.effect ?? (isSingle ? resolvedImageEffect : "none");
+                      item.type === "image"
+                        ? item.effect ?? (isSingle ? resolvedImageEffect : "none")
+                        : "none";
                     const fadeDuration =
                       resolvedTransitionEffect === "fade" &&
-                      imageTimeline.length > 1
+                      contentTimeline.length > 1
                         ? Math.min(
                             Math.floor(fps * 0.5),
                             Math.floor(item.durationInFrames / 2),
@@ -840,51 +821,45 @@ export const Main = ({
                           )
                         : 0;
                     const scale =
-                      isSingle && effect === "zoom-in"
+                      item.type === "image" && isSingle && effect === "zoom-in"
                         ? 1 + 0.08 * progress
-                        : isSingle && effect === "zoom-out"
+                        : item.type === "image" && isSingle && effect === "zoom-out"
                           ? 1.08 - 0.08 * progress
                           : 1;
                     return (
                       <Sequence
-                        key={`${item.src}-${index}`}
+                        key={`${item.type}-${item.src}-${index}`}
                         from={item.start}
                         durationInFrames={item.durationInFrames}
                       >
-                        <Img
-                          src={item.src}
-                          alt="作品素材"
-                          className="w-[460px] h-[260px]"
-                          style={{
-                            objectFit: resolvedFit,
-                            objectPosition: resolvedPosition,
-                            opacity,
-                            transform: `scale(${scale})`,
-                          }}
-                        />
+                        {item.type === "video" ? (
+                          <Video
+                            src={item.src}
+                            className="w-[460px] h-[260px]"
+                            style={{
+                              objectFit: resolvedFit,
+                              objectPosition: resolvedPosition,
+                              opacity,
+                              transform: `scale(${scale})`,
+                            }}
+                          />
+                        ) : (
+                          <Img
+                            src={item.src}
+                            alt="作品素材"
+                            className="w-[460px] h-[260px]"
+                            style={{
+                              objectFit: resolvedFit,
+                              objectPosition: resolvedPosition,
+                              opacity,
+                              transform: `scale(${scale})`,
+                            }}
+                          />
+                        )}
                       </Sequence>
                     );
                   })}
                 </div>
-              ) : resolvedMediaType === "video" && resolvedCoverVideo ? (
-                <Video
-                  src={resolvedCoverVideo}
-                  className="w-[460px] h-[260px] rounded-2xl shadow-lg"
-                  style={{
-                    objectFit: resolvedFit,
-                    objectPosition: resolvedPosition,
-                  }}
-                />
-              ) : resolvedCoverImage ? (
-                <Img
-                  src={resolvedCoverImage}
-                  alt="作品素材"
-                  className="w-[460px] h-[260px] rounded-2xl shadow-lg"
-                  style={{
-                    objectFit: resolvedFit,
-                    objectPosition: resolvedPosition,
-                  }}
-                />
               ) : null}
             </div>
           )}
