@@ -42,8 +42,9 @@ export type CompositionConfig = {
   defaultProps: z.infer<typeof CompositionProps>;
 };
 
-const getSafeFileName = (title: string) => {
-  const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_");
+const getSafeFileName = (title?: string) => {
+  const resolved = title?.trim() ? title.trim() : "untitled";
+  const safeTitle = resolved.replace(/[^a-zA-Z0-9]/g, "_");
   return `${safeTitle}.mp4`;
 };
 

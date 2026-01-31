@@ -5,7 +5,7 @@ const ImageEffect = z.enum(["none", "zoom-in", "zoom-out"]);
 const TransitionEffect = z.enum(["none", "fade"]);
 
 export const CompositionProps = z.object({
-  title: z.string(),
+  title: z.string().optional(),
   subtitle: z.string().optional(),
   badgeText: z.string().optional(),
   coverImageDataUrl: z.string().optional(),
@@ -21,6 +21,30 @@ export const CompositionProps = z.object({
       }),
     )
     .optional(),
+  coverImageSequence: z
+    .array(
+      z.object({
+        src: z.string(),
+        durationInFrames: z.number().optional(),
+      }),
+    )
+    .optional(),
+  coverVideoSequence: z
+    .array(
+      z.object({
+        src: z.string(),
+        durationInFrames: z.number().optional(),
+      }),
+    )
+    .optional(),
+  audioSequence: z
+    .array(
+      z.object({
+        src: z.string(),
+        durationInFrames: z.number().optional(),
+      }),
+    )
+    .optional(),
   imageEffect: ImageEffect.optional(),
   transitionEffect: TransitionEffect.optional(),
   imageDurationInFrames: z.number().optional(),
@@ -30,12 +54,15 @@ export const CompositionProps = z.object({
   accentColor: z.string().optional(),
   titleFontSize: z.number().optional(),
   subtitleFontSize: z.number().optional(),
+  titleDisplayFrames: z.number().optional(),
+  captionsFontSize: z.number().optional(),
+  captionsFontFamily: z.string().optional(),
   durationInFrames: z.number().optional(),
-  coverMediaType: z.enum(["image", "video"]).optional(),
+  coverMediaType: z.enum(["image", "video", "mixed"]).optional(),
   audioDataUrl: z.string().optional(),
   mediaFit: z.enum(["cover", "contain"]).optional(),
   mediaPosition: z.enum(["center", "top", "bottom", "left", "right"]).optional(),
-  layout: z.enum(["center", "left", "image-top"]).optional(),
+  layout: z.enum(["center", "left", "image-top", "full-screen"]).optional(),
   showRings: z.boolean().optional(),
 });
 
@@ -54,6 +81,9 @@ export const defaultMyCompProps: z.infer<typeof CompositionProps> = {
   accentColor: "#2563eb",
   titleFontSize: 70,
   subtitleFontSize: 24,
+  titleDisplayFrames: 90,
+  captionsFontSize: 28,
+  captionsFontFamily: "inter",
   durationInFrames: 200,
   coverMediaType: "image",
   mediaFit: "cover",

@@ -29,6 +29,9 @@ export const Main = ({
   logoImageDataUrl,
   imageArray,
   imageSequence,
+  coverImageSequence,
+  coverVideoSequence,
+  audioSequence,
   imageEffect,
   transitionEffect,
   imageDurationInFrames,
@@ -39,6 +42,9 @@ export const Main = ({
   accentColor,
   titleFontSize,
   subtitleFontSize,
+  titleDisplayFrames,
+  captionsFontSize,
+  captionsFontFamily,
   coverMediaType,
   mediaFit,
   mediaPosition,
@@ -55,11 +61,23 @@ export const Main = ({
   const resolvedTitleSize =
     titleFontSize ?? (layout === "center" ? 70 : 64);
   const resolvedSubtitleSize = subtitleFontSize ?? 24;
+  const resolvedTitleDisplayFrames =
+    titleDisplayFrames && titleDisplayFrames > 0
+      ? Math.floor(titleDisplayFrames)
+      : 0;
+  const resolvedCaptionsSize =
+    captionsFontSize && captionsFontSize > 0 ? captionsFontSize : 28;
+  const resolvedCaptionsFontFamily =
+    captionsFontFamily === "serif"
+      ? "serif"
+      : captionsFontFamily === "system"
+        ? "system-ui"
+        : fontFamily;
   const resolvedFit = mediaFit ?? "cover";
   const resolvedPosition = mediaPosition ?? "center";
   const resolvedMediaType = coverMediaType ?? "image";
-  const resolvedCoverImage = coverImageDataUrl;
-  const resolvedCoverVideo = coverVideoDataUrl;
+  const resolvedCoverImageSource = coverImageDataUrl;
+  const resolvedCoverVideoSource = coverVideoDataUrl;
   const resolvedImageArray = (imageArray ?? [])
     .map((item) => item.trim())
     .filter(Boolean);
@@ -70,11 +88,39 @@ export const Main = ({
       effect: item.effect,
     }))
     .filter((item) => item.src.length > 0);
+  const resolvedCoverImageSequence = (coverImageSequence ?? [])
+    .map((item) => ({
+      src: item.src.trim(),
+      durationInFrames: item.durationInFrames,
+    }))
+    .filter((item) => item.src.length > 0);
+  const resolvedCoverVideoSequence = (coverVideoSequence ?? [])
+    .map((item) => ({
+      src: item.src.trim(),
+      durationInFrames: item.durationInFrames,
+    }))
+    .filter((item) => item.src.length > 0);
+  const resolvedAudioSequence = (audioSequence ?? [])
+    .map((item) => ({
+      src: item.src.trim(),
+      durationInFrames: item.durationInFrames,
+    }))
+    .filter((item) => item.src.length > 0);
   const resolvedSubtitles = (subtitles ?? [])
     .map((item) => item.trim())
     .filter(Boolean);
   const resolvedImageEffect = imageEffect ?? "none";
   const resolvedTransitionEffect = transitionEffect ?? "fade";
+  const resolvedTitle = title?.trim();
+  const resolvedSubtitle = subtitle?.trim();
+  const hasTitle = Boolean(resolvedTitle);
+  const hasSubtitle = Boolean(resolvedSubtitle);
+  const showTitleInCover =
+    resolvedTitleDisplayFrames > 0 && frame < resolvedTitleDisplayFrames;
+  const showTitleInContent =
+    resolvedTitleDisplayFrames > 0 &&
+    frame >= contentStart &&
+    frame < contentStart + resolvedTitleDisplayFrames;
 
   const logoOut = spring({
     fps,
@@ -127,6 +173,76 @@ export const Main = ({
     }
     return timeline;
   })();
+  const buildTimeline = (
+    items: Array<{ src: string; durationInFrames?: number }>,
+    totalDuration: number,
+  ) => {
+    if (items.length === 0) {
+      return [];
+    }
+    const baseDuration = Math.max(1, Math.floor(totalDuration / items.length));
+    const timeline: Array<{
+      src: string;
+      start: number;
+      durationInFrames: number;
+    }> = [];
+    let start = 0;
+    for (const item of items) {
+      if (start >= totalDuration) {
+        break;
+      }
+      const rawDuration = item.durationInFrames ?? baseDuration;
+      const durationInFrames = Math.max(
+        1,
+        Math.min(totalDuration - start, Math.floor(rawDuration)),
+      );
+      timeline.push({
+        src: item.src,
+        start,
+        durationInFrames,
+      });
+      start += durationInFrames;
+    }
+    return timeline;
+  };
+  const coverImageTimeline = buildTimeline(
+    resolvedCoverImageSequence.length > 0
+      ? resolvedCoverImageSequence
+      : resolvedCoverImageSource
+        ? [{ src: resolvedCoverImageSource }]
+        : [],
+    durationInFrames,
+  );
+  const coverVideoTimeline = buildTimeline(
+    resolvedCoverVideoSequence.length > 0
+      ? resolvedCoverVideoSequence
+      : resolvedCoverVideoSource
+        ? [{ src: resolvedCoverVideoSource }]
+        : [],
+    durationInFrames,
+  );
+  const audioTimeline = buildTimeline(
+    resolvedAudioSequence.length > 0
+      ? resolvedAudioSequence
+      : audioDataUrl
+        ? [{ src: audioDataUrl }]
+        : [],
+    durationInFrames,
+  );
+  const resolveTimelineSrc = (
+    timeline: Array<{ src: string; start: number; durationInFrames: number }>,
+  ) => {
+    for (const item of timeline) {
+      if (frame >= item.start && frame < item.start + item.durationInFrames) {
+        return item.src;
+      }
+    }
+    return timeline.length > 0 ? timeline[timeline.length - 1].src : undefined;
+  };
+  const resolvedCoverImage =
+    resolveTimelineSrc(coverImageTimeline) ?? resolvedCoverImageSource;
+  const resolvedCoverVideo =
+    resolveTimelineSrc(coverVideoTimeline) ?? resolvedCoverVideoSource;
   const perSubtitleDuration =
     resolvedSubtitles.length > 0
       ? Math.max(1, Math.floor(contentDuration / resolvedSubtitles.length))
@@ -170,6 +286,7 @@ export const Main = ({
                     className="w-[120px] h-[120px] object-contain"
                   />
                 ) : null}
+              {showTitleInContent && hasTitle ? (
                 <h1
                   className="font-bold text-left"
                   style={{
@@ -178,9 +295,10 @@ export const Main = ({
                     fontSize: `${resolvedTitleSize}px`,
                   }}
                 >
-                  {title}
+                  {resolvedTitle}
                 </h1>
-                {subtitle ? (
+              ) : null}
+              {showTitleInContent && hasSubtitle ? (
                   <p
                     className="text-left"
                     style={{
@@ -188,12 +306,24 @@ export const Main = ({
                       fontSize: `${resolvedSubtitleSize}px`,
                     }}
                   >
-                    {subtitle}
+                  {resolvedSubtitle}
                   </p>
                 ) : null}
               </div>
-              {imageTimeline.length > 0 ? (
+              {imageTimeline.length > 0 ||
+              ((resolvedMediaType === "video" || resolvedMediaType === "mixed") &&
+                resolvedCoverVideo) ? (
                 <div className="relative w-[420px] h-[260px] rounded-2xl shadow-lg overflow-hidden">
+                  {resolvedMediaType === "mixed" && resolvedCoverVideo ? (
+                    <Video
+                      src={resolvedCoverVideo}
+                      className="absolute inset-0 w-full h-full"
+                      style={{
+                        objectFit: resolvedFit,
+                        objectPosition: resolvedPosition,
+                      }}
+                    />
+                  ) : null}
                   {imageTimeline.map((item, index) => {
                     const relativeFrame = frame - contentStart - item.start;
                     const isSingle = imageTimeline.length === 1;
@@ -251,7 +381,7 @@ export const Main = ({
                         <Img
                           src={item.src}
                           alt="作品素材"
-                          className="w-[420px] h-[260px]"
+                          className="w-[420px] h-[260px] relative"
                           style={{
                             objectFit: resolvedFit,
                             objectPosition: resolvedPosition,
@@ -262,16 +392,33 @@ export const Main = ({
                       </Sequence>
                     );
                   })}
+                  {imageTimeline.length === 0 &&
+                  resolvedMediaType !== "mixed" &&
+                  resolvedMediaType === "video" &&
+                  resolvedCoverVideo ? (
+                    <Video
+                      src={resolvedCoverVideo}
+                      className="absolute inset-0 w-full h-full"
+                      style={{
+                        objectFit: resolvedFit,
+                        objectPosition: resolvedPosition,
+                      }}
+                    />
+                  ) : null}
+                  {imageTimeline.length === 0 &&
+                  (resolvedMediaType !== "video" || !resolvedCoverVideo) &&
+                  resolvedCoverImage ? (
+                    <Img
+                      src={resolvedCoverImage}
+                      alt="作品素材"
+                      className="absolute inset-0 w-full h-full"
+                      style={{
+                        objectFit: resolvedFit,
+                        objectPosition: resolvedPosition,
+                      }}
+                    />
+                  ) : null}
                 </div>
-              ) : resolvedMediaType === "video" && resolvedCoverVideo ? (
-                <Video
-                  src={resolvedCoverVideo}
-                  className="w-[420px] h-[260px] rounded-2xl shadow-lg"
-                  style={{
-                    objectFit: resolvedFit,
-                    objectPosition: resolvedPosition,
-                  }}
-                />
               ) : resolvedCoverImage ? (
                 <Img
                   src={resolvedCoverImage}
@@ -286,8 +433,20 @@ export const Main = ({
             </div>
           ) : layout === "image-top" ? (
             <div className="flex flex-col items-center gap-6">
-              {imageTimeline.length > 0 ? (
+              {imageTimeline.length > 0 ||
+              ((resolvedMediaType === "video" || resolvedMediaType === "mixed") &&
+                resolvedCoverVideo) ? (
                 <div className="relative w-[520px] h-[300px] rounded-2xl shadow-lg overflow-hidden">
+                  {resolvedMediaType === "mixed" && resolvedCoverVideo ? (
+                    <Video
+                      src={resolvedCoverVideo}
+                      className="absolute inset-0 w-full h-full"
+                      style={{
+                        objectFit: resolvedFit,
+                        objectPosition: resolvedPosition,
+                      }}
+                    />
+                  ) : null}
                   {imageTimeline.map((item, index) => {
                     const relativeFrame = frame - contentStart - item.start;
                     const isSingle = imageTimeline.length === 1;
@@ -345,7 +504,7 @@ export const Main = ({
                         <Img
                           src={item.src}
                           alt="作品素材"
-                          className="w-[520px] h-[300px]"
+                          className="w-[520px] h-[300px] relative"
                           style={{
                             objectFit: resolvedFit,
                             objectPosition: resolvedPosition,
@@ -356,16 +515,33 @@ export const Main = ({
                       </Sequence>
                     );
                   })}
+                  {imageTimeline.length === 0 &&
+                  resolvedMediaType !== "mixed" &&
+                  resolvedMediaType === "video" &&
+                  resolvedCoverVideo ? (
+                    <Video
+                      src={resolvedCoverVideo}
+                      className="absolute inset-0 w-full h-full"
+                      style={{
+                        objectFit: resolvedFit,
+                        objectPosition: resolvedPosition,
+                      }}
+                    />
+                  ) : null}
+                  {imageTimeline.length === 0 &&
+                  (resolvedMediaType !== "video" || !resolvedCoverVideo) &&
+                  resolvedCoverImage ? (
+                    <Img
+                      src={resolvedCoverImage}
+                      alt="作品素材"
+                      className="absolute inset-0 w-full h-full"
+                      style={{
+                        objectFit: resolvedFit,
+                        objectPosition: resolvedPosition,
+                      }}
+                    />
+                  ) : null}
                 </div>
-              ) : resolvedMediaType === "video" && resolvedCoverVideo ? (
-                <Video
-                  src={resolvedCoverVideo}
-                  className="w-[520px] h-[300px] rounded-2xl shadow-lg"
-                  style={{
-                    objectFit: resolvedFit,
-                    objectPosition: resolvedPosition,
-                  }}
-                />
               ) : resolvedCoverImage ? (
                 <Img
                   src={resolvedCoverImage}
@@ -388,17 +564,19 @@ export const Main = ({
                   {badgeText}
                 </span>
               ) : null}
-              <h1
-                className="font-bold text-center"
-                style={{
-                  fontFamily,
-                  color: textColor ?? "#111827",
-                  fontSize: `${resolvedTitleSize}px`,
-                }}
-              >
-                {title}
-              </h1>
-              {subtitle ? (
+              {showTitleInContent && hasTitle ? (
+                <h1
+                  className="font-bold text-center"
+                  style={{
+                    fontFamily,
+                    color: textColor ?? "#111827",
+                    fontSize: `${resolvedTitleSize}px`,
+                  }}
+                >
+                  {resolvedTitle}
+                </h1>
+              ) : null}
+              {showTitleInContent && hasSubtitle ? (
                 <p
                   className="text-center"
                   style={{
@@ -406,7 +584,7 @@ export const Main = ({
                     fontSize: `${resolvedSubtitleSize}px`,
                   }}
                 >
-                  {subtitle}
+                  {resolvedSubtitle}
                 </p>
               ) : null}
               {logoImageDataUrl ? (
@@ -415,6 +593,158 @@ export const Main = ({
                   alt="作品徽标"
                   className="w-[120px] h-[120px] object-contain"
                 />
+              ) : null}
+            </div>
+          ) : layout === "full-screen" ? (
+            <div className="relative w-full h-full">
+              {resolvedMediaType === "video" && resolvedCoverVideo ? (
+                <Video
+                  src={resolvedCoverVideo}
+                  className="absolute inset-0 w-full h-full"
+                  style={{
+                    objectFit: resolvedFit,
+                    objectPosition: resolvedPosition,
+                  }}
+                />
+              ) : null}
+              {resolvedMediaType === "mixed" && resolvedCoverVideo ? (
+                <Video
+                  src={resolvedCoverVideo}
+                  className="absolute inset-0 w-full h-full"
+                  style={{
+                    objectFit: resolvedFit,
+                    objectPosition: resolvedPosition,
+                  }}
+                />
+              ) : null}
+              {imageTimeline.length > 0 ? (
+                <div className="absolute inset-0">
+                  {imageTimeline.map((item, index) => {
+                    const relativeFrame = frame - contentStart - item.start;
+                    const isSingle = imageTimeline.length === 1;
+                    const effect =
+                      item.effect ?? (isSingle ? resolvedImageEffect : "none");
+                    const fadeDuration =
+                      resolvedTransitionEffect === "fade" &&
+                      imageTimeline.length > 1
+                        ? Math.min(
+                            Math.floor(fps * 0.5),
+                            Math.floor(item.durationInFrames / 2),
+                          )
+                        : 0;
+                    const safeFadeDuration =
+                      fadeDuration > 0 &&
+                      item.durationInFrames - fadeDuration > fadeDuration
+                        ? fadeDuration
+                        : 0;
+                    const opacity =
+                      safeFadeDuration > 0
+                        ? interpolate(
+                            relativeFrame,
+                            [
+                              0,
+                              safeFadeDuration,
+                              item.durationInFrames - safeFadeDuration,
+                              item.durationInFrames,
+                            ],
+                            [0, 1, 1, 0],
+                            {
+                              extrapolateLeft: "clamp",
+                              extrapolateRight: "clamp",
+                            },
+                          )
+                        : 1;
+                    const progress =
+                      item.durationInFrames > 0
+                        ? Math.min(
+                            1,
+                            Math.max(0, relativeFrame / item.durationInFrames),
+                          )
+                        : 0;
+                    const scale =
+                      isSingle && effect === "zoom-in"
+                        ? 1 + 0.08 * progress
+                        : isSingle && effect === "zoom-out"
+                          ? 1.08 - 0.08 * progress
+                          : 1;
+                    return (
+                      <Sequence
+                        key={`${item.src}-${index}`}
+                        from={item.start}
+                        durationInFrames={item.durationInFrames}
+                      >
+                        <Img
+                          src={item.src}
+                          alt="作品素材"
+                          className="absolute inset-0 w-full h-full"
+                          style={{
+                            objectFit: resolvedFit,
+                            objectPosition: resolvedPosition,
+                            opacity,
+                            transform: `scale(${scale})`,
+                          }}
+                        />
+                      </Sequence>
+                    );
+                  })}
+                </div>
+              ) : resolvedMediaType === "image" && resolvedCoverImage ? (
+                <Img
+                  src={resolvedCoverImage}
+                  alt="作品素材"
+                  className="absolute inset-0 w-full h-full"
+                  style={{
+                    objectFit: resolvedFit,
+                    objectPosition: resolvedPosition,
+                  }}
+                />
+              ) : null}
+              {showTitleInContent && (hasTitle || hasSubtitle) ? (
+                <AbsoluteFill className="items-center justify-center">
+                  <div className="flex flex-col items-center gap-4 px-12">
+                    {badgeText ? (
+                      <span
+                        className="text-sm font-semibold px-3 py-1 rounded-full w-fit"
+                        style={{
+                          backgroundColor: accentColor ?? "#2563eb",
+                          color: "#ffffff",
+                        }}
+                      >
+                        {badgeText}
+                      </span>
+                    ) : null}
+                    {logoImageDataUrl ? (
+                      <Img
+                        src={logoImageDataUrl}
+                        alt="作品徽标"
+                        className="w-[120px] h-[120px] object-contain"
+                      />
+                    ) : null}
+                    {hasTitle ? (
+                      <h1
+                        className="font-bold text-center"
+                        style={{
+                          fontFamily,
+                          color: textColor ?? "#ffffff",
+                          fontSize: `${resolvedTitleSize}px`,
+                        }}
+                      >
+                        {resolvedTitle}
+                      </h1>
+                    ) : null}
+                    {hasSubtitle ? (
+                      <p
+                        className="text-center"
+                        style={{
+                          color: textColor ?? "#ffffff",
+                          fontSize: `${resolvedSubtitleSize}px`,
+                        }}
+                      >
+                        {resolvedSubtitle}
+                      </p>
+                    ) : null}
+                  </div>
+                </AbsoluteFill>
               ) : null}
             </div>
           ) : (
@@ -437,17 +767,19 @@ export const Main = ({
                   className="w-[120px] h-[120px] object-contain"
                 />
               ) : null}
-              <h1
-                className="font-bold text-center"
-                style={{
-                  fontFamily,
-                  color: textColor ?? "#111827",
-                  fontSize: `${resolvedTitleSize}px`,
-                }}
-              >
-                {title}
-              </h1>
-              {subtitle ? (
+              {showTitleInContent && hasTitle ? (
+                <h1
+                  className="font-bold text-center"
+                  style={{
+                    fontFamily,
+                    color: textColor ?? "#111827",
+                    fontSize: `${resolvedTitleSize}px`,
+                  }}
+                >
+                  {resolvedTitle}
+                </h1>
+              ) : null}
+              {showTitleInContent && hasSubtitle ? (
                 <p
                   className="text-center"
                   style={{
@@ -455,11 +787,21 @@ export const Main = ({
                     fontSize: `${resolvedSubtitleSize}px`,
                   }}
                 >
-                  {subtitle}
+                  {resolvedSubtitle}
                 </p>
               ) : null}
               {imageTimeline.length > 0 ? (
                 <div className="relative w-[460px] h-[260px] rounded-2xl shadow-lg overflow-hidden">
+                  {resolvedMediaType === "mixed" && resolvedCoverVideo ? (
+                    <Video
+                      src={resolvedCoverVideo}
+                      className="absolute inset-0 w-full h-full"
+                      style={{
+                        objectFit: resolvedFit,
+                        objectPosition: resolvedPosition,
+                      }}
+                    />
+                  ) : null}
                   {imageTimeline.map((item, index) => {
                     const relativeFrame = frame - contentStart - item.start;
                     const isSingle = imageTimeline.length === 1;
@@ -548,6 +890,37 @@ export const Main = ({
           )}
         </TextFade>
       </Sequence>
+      {showTitleInCover && (hasTitle || hasSubtitle) ? (
+        <Sequence durationInFrames={resolvedTitleDisplayFrames}>
+          <AbsoluteFill className="items-center justify-center">
+            <div className="flex flex-col items-center gap-4 px-12">
+              {hasTitle ? (
+                <h1
+                  className="font-bold text-center"
+                  style={{
+                    fontFamily,
+                    color: textColor ?? "#ffffff",
+                    fontSize: `${resolvedTitleSize}px`,
+                  }}
+                >
+                  {resolvedTitle}
+                </h1>
+              ) : null}
+              {hasSubtitle ? (
+                <p
+                  className="text-center"
+                  style={{
+                    color: textColor ?? "#ffffff",
+                    fontSize: `${resolvedSubtitleSize}px`,
+                  }}
+                >
+                  {resolvedSubtitle}
+                </p>
+              ) : null}
+            </div>
+          </AbsoluteFill>
+        </Sequence>
+      ) : null}
       {resolvedSubtitles.length > 0
         ? resolvedSubtitles.map((line, index) => {
             const isLast = index === resolvedSubtitles.length - 1;
@@ -562,10 +935,12 @@ export const Main = ({
               >
                 <AbsoluteFill className="items-center justify-end pb-12">
                   <div
-                    className="px-5 py-2 rounded-full text-lg font-semibold"
+                    className="px-5 py-2 rounded-full font-semibold"
                     style={{
                       backgroundColor: "rgba(0, 0, 0, 0.55)",
                       color: "#ffffff",
+                      fontFamily: resolvedCaptionsFontFamily,
+                      fontSize: `${resolvedCaptionsSize}px`,
                     }}
                   >
                     {line}
@@ -575,7 +950,17 @@ export const Main = ({
             );
           })
         : null}
-      {audioDataUrl ? <Audio src={audioDataUrl} /> : null}
+      {audioTimeline.length > 0
+        ? audioTimeline.map((item, index) => (
+            <Sequence
+              key={`${item.src}-${index}`}
+              from={item.start}
+              durationInFrames={item.durationInFrames}
+            >
+              <Audio src={item.src} />
+            </Sequence>
+          ))
+        : null}
     </AbsoluteFill>
   );
 };

@@ -27,9 +27,16 @@ type ImageSequenceItem = {
   durationInFrames?: number;
 };
 
+type MediaSequenceItem = {
+  type: "upload" | "url";
+  mediaId?: string;
+  url?: string;
+  durationInFrames?: number;
+};
+
 type WorkItem = {
   id: string;
-  title: string;
+  title?: string;
   subtitle?: string;
   badgeText?: string;
   coverImageDataUrl?: string;
@@ -39,6 +46,9 @@ type WorkItem = {
   coverVideoMediaId?: string;
   logoImageMediaId?: string;
   audioMediaId?: string;
+  coverImageSequenceItems?: MediaSequenceItem[];
+  coverVideoSequenceItems?: MediaSequenceItem[];
+  audioSequenceItems?: MediaSequenceItem[];
   imageMediaIds?: string[];
   imageSequenceItems?: ImageSequenceItem[];
   imageEffect?: "none" | "zoom-in" | "zoom-out";
@@ -55,11 +65,14 @@ type WorkItem = {
   accentColor?: string;
   titleFontSize?: number;
   subtitleFontSize?: number;
+  titleDisplayFrames?: number;
+  captionsFontSize?: number;
+  captionsFontFamily?: string;
   durationInFrames?: number;
-  coverMediaType?: "image" | "video";
+  coverMediaType?: "image" | "video" | "mixed";
   mediaFit?: "cover" | "contain";
   mediaPosition?: "center" | "top" | "bottom" | "left" | "right";
-  layout?: "center" | "left" | "image-top";
+  layout?: "center" | "left" | "image-top" | "full-screen";
   showRings?: boolean;
   addToRenderPage: boolean;
   createdAt: number;
@@ -119,7 +132,7 @@ const blobToDataUrl = (blob: Blob): Promise<string> => {
 
 const Home: NextPage = () => {
   const searchParams = useSearchParams();
-  const [text, setText] = useState<string>(defaultMyCompProps.title);
+  const [text, setText] = useState<string>(defaultMyCompProps.title ?? "");
   const [subtitle, setSubtitle] = useState<string>(
     defaultMyCompProps.subtitle ?? "",
   );
@@ -135,12 +148,8 @@ const Home: NextPage = () => {
   const [coverVideoMediaId, setCoverVideoMediaId] = useState<
     string | undefined
   >(undefined);
-  const [coverImageUrl, setCoverImageUrl] = useState<string>(
-    defaultMyCompProps.coverImageUrl ?? "",
-  );
-  const [coverVideoUrl, setCoverVideoUrl] = useState<string>(
-    defaultMyCompProps.coverVideoDataUrl ?? "",
-  );
+  const [coverImageUrl, setCoverImageUrl] = useState<string>("");
+  const [coverVideoUrl, setCoverVideoUrl] = useState<string>("");
   const [backgroundColor, setBackgroundColor] = useState<string | undefined>(
     defaultMyCompProps.backgroundColor,
   );
@@ -153,9 +162,7 @@ const Home: NextPage = () => {
   const [logoImageMediaId, setLogoImageMediaId] = useState<
     string | undefined
   >(undefined);
-  const [logoImageUrl, setLogoImageUrl] = useState<string>(
-    defaultMyCompProps.logoImageUrl ?? "",
-  );
+  const [logoImageUrl, setLogoImageUrl] = useState<string>("");
   const [audioDataUrl, setAudioDataUrl] = useState<string | undefined>(
     defaultMyCompProps.audioDataUrl,
   );
@@ -167,6 +174,15 @@ const Home: NextPage = () => {
   );
   const [imageSequenceItems, setImageSequenceItems] = useState<
     ImageSequenceItem[]
+  >([]);
+  const [coverImageSequenceItems, setCoverImageSequenceItems] = useState<
+    MediaSequenceItem[]
+  >([]);
+  const [coverVideoSequenceItems, setCoverVideoSequenceItems] = useState<
+    MediaSequenceItem[]
+  >([]);
+  const [audioSequenceItems, setAudioSequenceItems] = useState<
+    MediaSequenceItem[]
   >([]);
   const [coverImageObjectUrl, setCoverImageObjectUrl] = useState<
     string | undefined
@@ -180,6 +196,13 @@ const Home: NextPage = () => {
   const [audioObjectUrl, setAudioObjectUrl] = useState<string | undefined>(
     undefined,
   );
+  const [coverImageObjectUrls, setCoverImageObjectUrls] = useState<string[]>(
+    [],
+  );
+  const [coverVideoObjectUrls, setCoverVideoObjectUrls] = useState<string[]>(
+    [],
+  );
+  const [audioObjectUrls, setAudioObjectUrls] = useState<string[]>([]);
   const [imageObjectUrls, setImageObjectUrls] = useState<string[]>([]);
   const [coverImageServerDataUrl, setCoverImageServerDataUrl] = useState<
     string | undefined
@@ -193,6 +216,13 @@ const Home: NextPage = () => {
   const [audioServerDataUrl, setAudioServerDataUrl] = useState<
     string | undefined
   >(undefined);
+  const [coverImageServerDataUrls, setCoverImageServerDataUrls] = useState<
+    string[]
+  >([]);
+  const [coverVideoServerDataUrls, setCoverVideoServerDataUrls] = useState<
+    string[]
+  >([]);
+  const [audioServerDataUrls, setAudioServerDataUrls] = useState<string[]>([]);
   const [imageServerDataUrls, setImageServerDataUrls] = useState<string[]>([]);
   const [textColor, setTextColor] = useState<string | undefined>(
     defaultMyCompProps.textColor,
@@ -206,10 +236,21 @@ const Home: NextPage = () => {
   const [subtitleFontSize, setSubtitleFontSize] = useState<number>(
     defaultMyCompProps.subtitleFontSize ?? 24,
   );
+  const [titleDisplayFrames, setTitleDisplayFrames] = useState<number>(
+    defaultMyCompProps.titleDisplayFrames ?? 90,
+  );
+  const [captionsFontSize, setCaptionsFontSize] = useState<number>(
+    defaultMyCompProps.captionsFontSize ?? 28,
+  );
+  const [captionsFontFamily, setCaptionsFontFamily] = useState<string>(
+    defaultMyCompProps.captionsFontFamily ?? "inter",
+  );
   const [durationInFrames, setDurationInFrames] = useState<number>(
     defaultMyCompProps.durationInFrames ?? DURATION_IN_FRAMES,
   );
-  const [coverMediaType, setCoverMediaType] = useState<"image" | "video">(
+  const [coverMediaType, setCoverMediaType] = useState<
+    "image" | "video" | "mixed"
+  >(
     defaultMyCompProps.coverMediaType ?? "image",
   );
   const [mediaFit, setMediaFit] = useState<"cover" | "contain">(
@@ -218,7 +259,9 @@ const Home: NextPage = () => {
   const [mediaPosition, setMediaPosition] = useState<
     "center" | "top" | "bottom" | "left" | "right"
   >(defaultMyCompProps.mediaPosition ?? "center");
-  const [layout, setLayout] = useState<"center" | "left" | "image-top">(
+  const [layout, setLayout] = useState<
+    "center" | "left" | "image-top" | "full-screen"
+  >(
     defaultMyCompProps.layout ?? "center",
   );
   const [showRings, setShowRings] = useState<boolean>(
@@ -238,6 +281,21 @@ const Home: NextPage = () => {
       .filter((item) => item.type === "upload" && item.mediaId)
       .map((item) => item.mediaId as string);
   }, [imageSequenceItems]);
+  const coverImageMediaIds = useMemo(() => {
+    return coverImageSequenceItems
+      .filter((item) => item.type === "upload" && item.mediaId)
+      .map((item) => item.mediaId as string);
+  }, [coverImageSequenceItems]);
+  const coverVideoMediaIds = useMemo(() => {
+    return coverVideoSequenceItems
+      .filter((item) => item.type === "upload" && item.mediaId)
+      .map((item) => item.mediaId as string);
+  }, [coverVideoSequenceItems]);
+  const audioMediaIds = useMemo(() => {
+    return audioSequenceItems
+      .filter((item) => item.type === "upload" && item.mediaId)
+      .map((item) => item.mediaId as string);
+  }, [audioSequenceItems]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -286,7 +344,7 @@ const Home: NextPage = () => {
 
   useEffect(() => {
     if (selectedWorkId === "builtin") {
-      setText(defaultMyCompProps.title);
+      setText(defaultMyCompProps.title ?? "");
       setSubtitle(defaultMyCompProps.subtitle ?? "");
       setBadgeText(defaultMyCompProps.badgeText ?? "");
       setCoverImageDataUrl(defaultMyCompProps.coverImageDataUrl);
@@ -296,9 +354,9 @@ const Home: NextPage = () => {
       setCoverVideoMediaId(undefined);
       setLogoImageMediaId(undefined);
       setAudioMediaId(undefined);
-      setCoverImageUrl(defaultMyCompProps.coverImageUrl ?? "");
-      setCoverVideoUrl(defaultMyCompProps.coverVideoDataUrl ?? "");
-      setLogoImageUrl(defaultMyCompProps.logoImageUrl ?? "");
+      setCoverImageUrl("");
+      setCoverVideoUrl("");
+      setLogoImageUrl("");
       setAudioDataUrl(defaultMyCompProps.audioDataUrl);
       setAudioUrl(defaultMyCompProps.audioDataUrl ?? "");
       setImageSequenceItems(
@@ -307,16 +365,25 @@ const Home: NextPage = () => {
           url,
         })),
       );
+      setCoverImageSequenceItems([]);
+      setCoverVideoSequenceItems([]);
+      setAudioSequenceItems([]);
       setCoverImageObjectUrl(undefined);
       setCoverVideoObjectUrl(undefined);
       setLogoImageObjectUrl(undefined);
       setAudioObjectUrl(undefined);
+      setCoverImageObjectUrls([]);
+      setCoverVideoObjectUrls([]);
+      setAudioObjectUrls([]);
       setImageObjectUrls([]);
       setBackgroundColor(defaultMyCompProps.backgroundColor);
       setTextColor(defaultMyCompProps.textColor);
       setAccentColor(defaultMyCompProps.accentColor);
       setTitleFontSize(defaultMyCompProps.titleFontSize ?? 70);
       setSubtitleFontSize(defaultMyCompProps.subtitleFontSize ?? 24);
+      setTitleDisplayFrames(defaultMyCompProps.titleDisplayFrames ?? 90);
+      setCaptionsFontSize(defaultMyCompProps.captionsFontSize ?? 28);
+      setCaptionsFontFamily(defaultMyCompProps.captionsFontFamily ?? "inter");
       setDurationInFrames(
         defaultMyCompProps.durationInFrames ?? DURATION_IN_FRAMES,
       );
@@ -334,19 +401,111 @@ const Home: NextPage = () => {
     if (selected) {
       const fallbackImageSequenceItems: ImageSequenceItem[] = [
         ...(selected.imageMediaIds ?? []).map((mediaId) => ({
-          type: "upload",
+          type: "upload" as const,
           mediaId,
         })),
         ...(selected.imageUrls ?? []).map((url) => ({
-          type: "url",
+          type: "url" as const,
           url,
         })),
+      ];
+      const fallbackCoverImageSequenceItems: MediaSequenceItem[] = [
+        ...(selected.coverImageMediaId
+          ? [
+              {
+                type: "upload" as const,
+                mediaId: selected.coverImageMediaId,
+              },
+            ]
+          : []),
+        ...(selected.coverImageUrl
+          ? [
+              {
+                type: "url" as const,
+                url: selected.coverImageUrl,
+              },
+            ]
+          : []),
+        ...(selected.coverImageDataUrl
+          ? [
+              {
+                type: "url" as const,
+                url: selected.coverImageDataUrl,
+              },
+            ]
+          : []),
+      ];
+      const fallbackCoverVideoSequenceItems: MediaSequenceItem[] = [
+        ...(selected.coverVideoMediaId
+          ? [
+              {
+                type: "upload" as const,
+                mediaId: selected.coverVideoMediaId,
+              },
+            ]
+          : []),
+        ...(selected.coverVideoUrl
+          ? [
+              {
+                type: "url" as const,
+                url: selected.coverVideoUrl,
+              },
+            ]
+          : []),
+        ...(selected.coverVideoDataUrl
+          ? [
+              {
+                type: "url" as const,
+                url: selected.coverVideoDataUrl,
+              },
+            ]
+          : []),
+      ];
+      const fallbackAudioSequenceItems: MediaSequenceItem[] = [
+        ...(selected.audioMediaId
+          ? [
+              {
+                type: "upload" as const,
+                mediaId: selected.audioMediaId,
+              },
+            ]
+          : []),
+        ...(selected.audioUrl
+          ? [
+              {
+                type: "url" as const,
+                url: selected.audioUrl,
+              },
+            ]
+          : []),
+        ...(selected.audioDataUrl
+          ? [
+              {
+                type: "url" as const,
+                url: selected.audioDataUrl,
+              },
+            ]
+          : []),
       ];
       const nextSequenceItems =
         selected.imageSequenceItems && selected.imageSequenceItems.length > 0
           ? selected.imageSequenceItems
           : fallbackImageSequenceItems;
-      setText(selected.title);
+      const nextCoverImageSequenceItems =
+        selected.coverImageSequenceItems &&
+        selected.coverImageSequenceItems.length > 0
+          ? selected.coverImageSequenceItems
+          : fallbackCoverImageSequenceItems;
+      const nextCoverVideoSequenceItems =
+        selected.coverVideoSequenceItems &&
+        selected.coverVideoSequenceItems.length > 0
+          ? selected.coverVideoSequenceItems
+          : fallbackCoverVideoSequenceItems;
+      const nextAudioSequenceItems =
+        selected.audioSequenceItems && selected.audioSequenceItems.length > 0
+          ? selected.audioSequenceItems
+          : fallbackAudioSequenceItems;
+      setText(selected.title ?? "");
       setSubtitle(selected.subtitle ?? "");
       setBadgeText(selected.badgeText ?? "");
       setCoverImageDataUrl(selected.coverImageDataUrl);
@@ -357,16 +516,34 @@ const Home: NextPage = () => {
       setLogoImageMediaId(selected.logoImageMediaId);
       setAudioMediaId(selected.audioMediaId);
       setImageSequenceItems(nextSequenceItems);
-      setCoverImageUrl(selected.coverImageUrl ?? "");
-      setCoverVideoUrl(selected.coverVideoUrl ?? "");
+      setCoverImageSequenceItems(nextCoverImageSequenceItems);
+      setCoverVideoSequenceItems(nextCoverVideoSequenceItems);
+      setAudioSequenceItems(nextAudioSequenceItems);
+      setCoverImageUrl(
+        nextCoverImageSequenceItems.find((item) => item.type === "url")?.url ??
+          selected.coverImageUrl ??
+          "",
+      );
+      setCoverVideoUrl(
+        nextCoverVideoSequenceItems.find((item) => item.type === "url")?.url ??
+          selected.coverVideoUrl ??
+          "",
+      );
       setLogoImageUrl(selected.logoImageUrl ?? "");
       setAudioDataUrl(selected.audioDataUrl);
-      setAudioUrl(selected.audioUrl ?? "");
+      setAudioUrl(
+        nextAudioSequenceItems.find((item) => item.type === "url")?.url ??
+          selected.audioUrl ??
+          "",
+      );
       setBackgroundColor(selected.backgroundColor);
       setTextColor(selected.textColor);
       setAccentColor(selected.accentColor);
       setTitleFontSize(selected.titleFontSize ?? 70);
       setSubtitleFontSize(selected.subtitleFontSize ?? 24);
+      setTitleDisplayFrames(selected.titleDisplayFrames ?? 90);
+      setCaptionsFontSize(selected.captionsFontSize ?? 28);
+      setCaptionsFontFamily(selected.captionsFontFamily ?? "inter");
       setDurationInFrames(
         selected.durationInFrames ?? DURATION_IN_FRAMES,
       );
@@ -574,6 +751,138 @@ const Home: NextPage = () => {
     let active = true;
     const objectUrls: string[] = [];
     const run = async () => {
+      if (coverImageMediaIds.length === 0) {
+        setCoverImageObjectUrls([]);
+        setCoverImageServerDataUrls([]);
+        return;
+      }
+      try {
+        const nextObjectUrls: string[] = [];
+        const nextServerUrls: string[] = [];
+        for (const mediaId of coverImageMediaIds) {
+          const blob = await loadMediaBlob(mediaId);
+          if (!active) {
+            return;
+          }
+          if (!blob) {
+            continue;
+          }
+          const objectUrl = URL.createObjectURL(blob);
+          objectUrls.push(objectUrl);
+          nextObjectUrls.push(objectUrl);
+          const dataUrl = await blobToDataUrl(blob);
+          nextServerUrls.push(dataUrl);
+        }
+        if (active) {
+          setCoverImageObjectUrls(nextObjectUrls);
+          setCoverImageServerDataUrls(nextServerUrls);
+        }
+      } catch {
+        if (active) {
+          setCoverImageObjectUrls([]);
+          setCoverImageServerDataUrls([]);
+        }
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [coverImageMediaIds]);
+
+  useEffect(() => {
+    let active = true;
+    const objectUrls: string[] = [];
+    const run = async () => {
+      if (coverVideoMediaIds.length === 0) {
+        setCoverVideoObjectUrls([]);
+        setCoverVideoServerDataUrls([]);
+        return;
+      }
+      try {
+        const nextObjectUrls: string[] = [];
+        const nextServerUrls: string[] = [];
+        for (const mediaId of coverVideoMediaIds) {
+          const blob = await loadMediaBlob(mediaId);
+          if (!active) {
+            return;
+          }
+          if (!blob) {
+            continue;
+          }
+          const objectUrl = URL.createObjectURL(blob);
+          objectUrls.push(objectUrl);
+          nextObjectUrls.push(objectUrl);
+          const dataUrl = await blobToDataUrl(blob);
+          nextServerUrls.push(dataUrl);
+        }
+        if (active) {
+          setCoverVideoObjectUrls(nextObjectUrls);
+          setCoverVideoServerDataUrls(nextServerUrls);
+        }
+      } catch {
+        if (active) {
+          setCoverVideoObjectUrls([]);
+          setCoverVideoServerDataUrls([]);
+        }
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [coverVideoMediaIds]);
+
+  useEffect(() => {
+    let active = true;
+    const objectUrls: string[] = [];
+    const run = async () => {
+      if (audioMediaIds.length === 0) {
+        setAudioObjectUrls([]);
+        setAudioServerDataUrls([]);
+        return;
+      }
+      try {
+        const nextObjectUrls: string[] = [];
+        const nextServerUrls: string[] = [];
+        for (const mediaId of audioMediaIds) {
+          const blob = await loadMediaBlob(mediaId);
+          if (!active) {
+            return;
+          }
+          if (!blob) {
+            continue;
+          }
+          const objectUrl = URL.createObjectURL(blob);
+          objectUrls.push(objectUrl);
+          nextObjectUrls.push(objectUrl);
+          const dataUrl = await blobToDataUrl(blob);
+          nextServerUrls.push(dataUrl);
+        }
+        if (active) {
+          setAudioObjectUrls(nextObjectUrls);
+          setAudioServerDataUrls(nextServerUrls);
+        }
+      } catch {
+        if (active) {
+          setAudioObjectUrls([]);
+          setAudioServerDataUrls([]);
+        }
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [audioMediaIds]);
+
+  useEffect(() => {
+    let active = true;
+    const objectUrls: string[] = [];
+    const run = async () => {
       if (imageMediaIds.length === 0) {
         setImageObjectUrls([]);
         setImageServerDataUrls([]);
@@ -633,6 +942,66 @@ const Home: NextPage = () => {
     });
     return map;
   }, [imageMediaIds, imageServerDataUrls]);
+  const coverImageObjectUrlMap = useMemo(() => {
+    const map = new Map<string, string>();
+    coverImageMediaIds.forEach((mediaId, index) => {
+      const objectUrl = coverImageObjectUrls[index];
+      if (objectUrl) {
+        map.set(mediaId, objectUrl);
+      }
+    });
+    return map;
+  }, [coverImageMediaIds, coverImageObjectUrls]);
+  const coverVideoObjectUrlMap = useMemo(() => {
+    const map = new Map<string, string>();
+    coverVideoMediaIds.forEach((mediaId, index) => {
+      const objectUrl = coverVideoObjectUrls[index];
+      if (objectUrl) {
+        map.set(mediaId, objectUrl);
+      }
+    });
+    return map;
+  }, [coverVideoMediaIds, coverVideoObjectUrls]);
+  const audioObjectUrlMap = useMemo(() => {
+    const map = new Map<string, string>();
+    audioMediaIds.forEach((mediaId, index) => {
+      const objectUrl = audioObjectUrls[index];
+      if (objectUrl) {
+        map.set(mediaId, objectUrl);
+      }
+    });
+    return map;
+  }, [audioMediaIds, audioObjectUrls]);
+  const coverImageServerDataUrlMap = useMemo(() => {
+    const map = new Map<string, string>();
+    coverImageMediaIds.forEach((mediaId, index) => {
+      const dataUrl = coverImageServerDataUrls[index];
+      if (dataUrl) {
+        map.set(mediaId, dataUrl);
+      }
+    });
+    return map;
+  }, [coverImageMediaIds, coverImageServerDataUrls]);
+  const coverVideoServerDataUrlMap = useMemo(() => {
+    const map = new Map<string, string>();
+    coverVideoMediaIds.forEach((mediaId, index) => {
+      const dataUrl = coverVideoServerDataUrls[index];
+      if (dataUrl) {
+        map.set(mediaId, dataUrl);
+      }
+    });
+    return map;
+  }, [coverVideoMediaIds, coverVideoServerDataUrls]);
+  const audioServerDataUrlMap = useMemo(() => {
+    const map = new Map<string, string>();
+    audioMediaIds.forEach((mediaId, index) => {
+      const dataUrl = audioServerDataUrls[index];
+      if (dataUrl) {
+        map.set(mediaId, dataUrl);
+      }
+    });
+    return map;
+  }, [audioMediaIds, audioServerDataUrls]);
 
   const inputProps: z.infer<typeof CompositionProps> = useMemo(() => {
     const resolvedCoverImage =
@@ -651,6 +1020,66 @@ const Home: NextPage = () => {
       audioUrl.trim().length > 0
         ? audioUrl.trim()
         : audioObjectUrl ?? audioDataUrl;
+    const resolvedCoverImageSequence = coverImageSequenceItems
+      .map((item) => {
+        const src =
+          item.type === "upload"
+            ? item.mediaId
+              ? coverImageObjectUrlMap.get(item.mediaId)
+              : undefined
+            : item.url;
+        if (!src) {
+          return null;
+        }
+        return {
+          src,
+          durationInFrames: item.durationInFrames,
+        };
+      })
+      .filter(Boolean) as Array<{
+      src: string;
+      durationInFrames?: number;
+    }>;
+    const resolvedCoverVideoSequence = coverVideoSequenceItems
+      .map((item) => {
+        const src =
+          item.type === "upload"
+            ? item.mediaId
+              ? coverVideoObjectUrlMap.get(item.mediaId)
+              : undefined
+            : item.url;
+        if (!src) {
+          return null;
+        }
+        return {
+          src,
+          durationInFrames: item.durationInFrames,
+        };
+      })
+      .filter(Boolean) as Array<{
+      src: string;
+      durationInFrames?: number;
+    }>;
+    const resolvedAudioSequence = audioSequenceItems
+      .map((item) => {
+        const src =
+          item.type === "upload"
+            ? item.mediaId
+              ? audioObjectUrlMap.get(item.mediaId)
+              : undefined
+            : item.url;
+        if (!src) {
+          return null;
+        }
+        return {
+          src,
+          durationInFrames: item.durationInFrames,
+        };
+      })
+      .filter(Boolean) as Array<{
+      src: string;
+      durationInFrames?: number;
+    }>;
     const resolvedImageSequence = imageSequenceItems
       .map((item) => {
         const src =
@@ -679,6 +1108,16 @@ const Home: NextPage = () => {
       coverImageDataUrl: resolvedCoverImage,
       coverVideoDataUrl: resolvedCoverVideo,
       logoImageDataUrl: resolvedLogoImage,
+      coverImageSequence:
+        resolvedCoverImageSequence.length > 0
+          ? resolvedCoverImageSequence
+          : undefined,
+      coverVideoSequence:
+        resolvedCoverVideoSequence.length > 0
+          ? resolvedCoverVideoSequence
+          : undefined,
+      audioSequence:
+        resolvedAudioSequence.length > 0 ? resolvedAudioSequence : undefined,
       imageArray:
         resolvedImageSequence.length === 0 && resolvedImageArray.length > 0
           ? resolvedImageArray
@@ -694,6 +1133,9 @@ const Home: NextPage = () => {
       accentColor,
       titleFontSize,
       subtitleFontSize,
+      titleDisplayFrames,
+      captionsFontSize,
+      captionsFontFamily,
       durationInFrames,
       coverMediaType,
       mediaFit,
@@ -705,14 +1147,20 @@ const Home: NextPage = () => {
     accentColor,
     audioDataUrl,
     audioObjectUrl,
+    audioObjectUrlMap,
+    audioSequenceItems,
     audioUrl,
     backgroundColor,
     badgeText,
     coverImageDataUrl,
     coverImageObjectUrl,
+    coverImageObjectUrlMap,
+    coverImageSequenceItems,
     coverImageUrl,
     coverVideoDataUrl,
     coverVideoObjectUrl,
+    coverVideoObjectUrlMap,
+    coverVideoSequenceItems,
     coverVideoUrl,
     coverMediaType,
     imageEffect,
@@ -731,6 +1179,9 @@ const Home: NextPage = () => {
     text,
     textColor,
     titleFontSize,
+    titleDisplayFrames,
+    captionsFontSize,
+    captionsFontFamily,
     transitionEffect,
     durationInFrames,
   ]);
@@ -752,6 +1203,66 @@ const Home: NextPage = () => {
       audioUrl.trim().length > 0
         ? audioUrl.trim()
         : audioServerDataUrl ?? audioDataUrl;
+    const resolvedCoverImageSequence = coverImageSequenceItems
+      .map((item) => {
+        const src =
+          item.type === "upload"
+            ? item.mediaId
+              ? coverImageServerDataUrlMap.get(item.mediaId)
+              : undefined
+            : item.url;
+        if (!src) {
+          return null;
+        }
+        return {
+          src,
+          durationInFrames: item.durationInFrames,
+        };
+      })
+      .filter(Boolean) as Array<{
+      src: string;
+      durationInFrames?: number;
+    }>;
+    const resolvedCoverVideoSequence = coverVideoSequenceItems
+      .map((item) => {
+        const src =
+          item.type === "upload"
+            ? item.mediaId
+              ? coverVideoServerDataUrlMap.get(item.mediaId)
+              : undefined
+            : item.url;
+        if (!src) {
+          return null;
+        }
+        return {
+          src,
+          durationInFrames: item.durationInFrames,
+        };
+      })
+      .filter(Boolean) as Array<{
+      src: string;
+      durationInFrames?: number;
+    }>;
+    const resolvedAudioSequence = audioSequenceItems
+      .map((item) => {
+        const src =
+          item.type === "upload"
+            ? item.mediaId
+              ? audioServerDataUrlMap.get(item.mediaId)
+              : undefined
+            : item.url;
+        if (!src) {
+          return null;
+        }
+        return {
+          src,
+          durationInFrames: item.durationInFrames,
+        };
+      })
+      .filter(Boolean) as Array<{
+      src: string;
+      durationInFrames?: number;
+    }>;
     const resolvedImageSequence = imageSequenceItems
       .map((item) => {
         const src =
@@ -780,6 +1291,16 @@ const Home: NextPage = () => {
       coverImageDataUrl: resolvedCoverImage,
       coverVideoDataUrl: resolvedCoverVideo,
       logoImageDataUrl: resolvedLogoImage,
+      coverImageSequence:
+        resolvedCoverImageSequence.length > 0
+          ? resolvedCoverImageSequence
+          : undefined,
+      coverVideoSequence:
+        resolvedCoverVideoSequence.length > 0
+          ? resolvedCoverVideoSequence
+          : undefined,
+      audioSequence:
+        resolvedAudioSequence.length > 0 ? resolvedAudioSequence : undefined,
       imageArray:
         resolvedImageSequence.length === 0 && resolvedImageArray.length > 0
           ? resolvedImageArray
@@ -795,6 +1316,9 @@ const Home: NextPage = () => {
       accentColor,
       titleFontSize,
       subtitleFontSize,
+      titleDisplayFrames,
+      captionsFontSize,
+      captionsFontFamily,
       durationInFrames,
       coverMediaType,
       mediaFit,
@@ -806,14 +1330,20 @@ const Home: NextPage = () => {
     accentColor,
     audioDataUrl,
     audioServerDataUrl,
+    audioSequenceItems,
+    audioServerDataUrlMap,
     audioUrl,
     backgroundColor,
     badgeText,
     coverImageDataUrl,
     coverImageServerDataUrl,
+    coverImageSequenceItems,
+    coverImageServerDataUrlMap,
     coverImageUrl,
     coverVideoDataUrl,
     coverVideoServerDataUrl,
+    coverVideoSequenceItems,
+    coverVideoServerDataUrlMap,
     coverVideoUrl,
     coverMediaType,
     imageEffect,
@@ -832,6 +1362,9 @@ const Home: NextPage = () => {
     text,
     textColor,
     titleFontSize,
+    titleDisplayFrames,
+    captionsFontSize,
+    captionsFontFamily,
     transitionEffect,
     durationInFrames,
   ]);
@@ -885,7 +1418,7 @@ const Home: NextPage = () => {
               <option value="builtin">内置示例作品</option>
               {availableWorks.map((work) => (
                 <option value={work.id} key={work.id}>
-                  {work.title}
+                  {work.title ?? "未命名作品"}
                 </option>
               ))}
             </select>
@@ -911,7 +1444,7 @@ const Home: NextPage = () => {
                 >
                   <div className="flex-1">
                     <div className="text-foreground font-medium">
-                      {work.title}
+                      {work.title ?? "未命名作品"}
                     </div>
                     <div className="text-xs text-subtitle">
                       {work.addToRenderPage ? "已加入渲染页" : "未加入渲染页"}

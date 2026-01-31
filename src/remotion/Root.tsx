@@ -18,8 +18,13 @@ export const RemotionRoot: React.FC = () => {
         component={Main}
         durationInFrames={defaultMyCompProps.durationInFrames ?? DURATION_IN_FRAMES}
         calculateMetadata={({ props }) => {
+          const resolvedProps = props as { durationInFrames?: number };
+          const resolvedDuration =
+            typeof resolvedProps.durationInFrames === "number"
+              ? resolvedProps.durationInFrames
+              : DURATION_IN_FRAMES;
           return {
-            durationInFrames: props.durationInFrames ?? DURATION_IN_FRAMES,
+            durationInFrames: resolvedDuration,
           };
         }}
         fps={VIDEO_FPS}

@@ -10,23 +10,40 @@ import { z } from 'zod';
 const renderRequestSchema = z.object({
   compositionId: z.string(),
   inputProps: z.object({
-    title: z.string(),
+    title: z.string().optional(),
     subtitle: z.string().optional(),
     badgeText: z.string().optional(),
     coverImageDataUrl: z.string().optional(),
     coverVideoDataUrl: z.string().optional(),
     logoImageDataUrl: z.string().optional(),
+    imageArray: z.array(z.string()).optional(),
+    imageSequence: z
+      .array(
+        z.object({
+          src: z.string(),
+          durationInFrames: z.number().optional(),
+          effect: z.enum(["none", "zoom-in", "zoom-out"]).optional(),
+        }),
+      )
+      .optional(),
+    imageEffect: z.enum(["none", "zoom-in", "zoom-out"]).optional(),
+    transitionEffect: z.enum(["none", "fade"]).optional(),
+    imageDurationInFrames: z.number().optional(),
+    subtitles: z.array(z.string()).optional(),
     backgroundColor: z.string().optional(),
     textColor: z.string().optional(),
     accentColor: z.string().optional(),
     titleFontSize: z.number().optional(),
     subtitleFontSize: z.number().optional(),
+    titleDisplayFrames: z.number().optional(),
+    captionsFontSize: z.number().optional(),
+    captionsFontFamily: z.string().optional(),
     durationInFrames: z.number().optional(),
-    coverMediaType: z.enum(["image", "video"]).optional(),
+    coverMediaType: z.enum(["image", "video", "mixed"]).optional(),
     audioDataUrl: z.string().optional(),
     mediaFit: z.enum(["cover", "contain"]).optional(),
     mediaPosition: z.enum(["center", "top", "bottom", "left", "right"]).optional(),
-    layout: z.enum(["center", "left", "image-top"]).optional(),
+    layout: z.enum(["center", "left", "image-top", "full-screen"]).optional(),
     showRings: z.boolean().optional(),
   }),
 });
@@ -93,7 +110,8 @@ const writeDataUrlToTempFile = async (
     .toString(36)
     .slice(2, 8)}.${ext}`;
   const filePath = join(tmpDir, fileName);
-  await writeFile(filePath, Buffer.from(base64, 'base64'));
+  const buffer = Buffer.from(base64, 'base64');
+  await writeFile(filePath, new Uint8Array(buffer));
   fileMap.set(fileName, { path: filePath, mime });
   return { value: `${baseUrl}/${fileName}`, filePath };
 };
@@ -253,7 +271,12 @@ export async function POST(request: NextRequest) {
           const browserExecutableArg = browserExecutable
             ? ` --browser-executable="${browserExecutable}" --chrome-mode=chrome-for-testing`
             : '';
-          const command = `npx remotion render ${compositionId} "${outputFile}" --props="${propsFile}"${browserExecutableArg} --log=verbose`;
+          const durationArg =
+            typeof nextInputProps.durationInFrames === 'number' &&
+            nextInputProps.durationInFrames > 0
+              ? ` --duration-in-frames=${Math.floor(nextInputProps.durationInFrames)}`
+              : '';
+          const command = `npx remotion render ${compositionId} "${outputFile}" --props="${propsFile}"${browserExecutableArg}${durationArg} --log=verbose`;
           
           console.log('Executing command:', command);
           
@@ -330,11 +353,16 @@ export async function POST(request: NextRequest) {
           const videoBase64 = videoBuffer.toString('base64');
 
           // 5. 发送最终结果
+          const resolvedTitle =
+            nextInputProps.title && nextInputProps.title.trim().length > 0
+              ? nextInputProps.title.trim()
+              : 'untitled';
+          const safeTitle = resolvedTitle.replace(/[^a-zA-Z0-9]/g, '_');
           sendProgress({ 
             stage: 'done', 
             progress: 100,
             videoBase64,
-            fileName: `${nextInputProps.title.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`
+            fileName: `${safeTitle}.mp4`
           });
 
           controller.close();
