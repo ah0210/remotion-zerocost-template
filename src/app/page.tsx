@@ -32,11 +32,14 @@ type WorkItem = {
   coverVideoMediaId?: string;
   logoImageMediaId?: string;
   audioMediaId?: string;
+  imageMediaIds?: string[];
   coverImageUrl?: string;
   coverVideoUrl?: string;
   logoImageUrl?: string;
+  imageUrls?: string[];
   audioDataUrl?: string;
   audioUrl?: string;
+  subtitles?: string[];
   backgroundColor?: string;
   textColor?: string;
   accentColor?: string;
@@ -149,9 +152,11 @@ const Home: NextPage = () => {
   const [audioMediaId, setAudioMediaId] = useState<string | undefined>(
     undefined,
   );
+  const [imageMediaIds, setImageMediaIds] = useState<string[]>([]);
   const [audioUrl, setAudioUrl] = useState<string>(
     defaultMyCompProps.audioDataUrl ?? "",
   );
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [coverImageObjectUrl, setCoverImageObjectUrl] = useState<
     string | undefined
   >(undefined);
@@ -164,6 +169,7 @@ const Home: NextPage = () => {
   const [audioObjectUrl, setAudioObjectUrl] = useState<string | undefined>(
     undefined,
   );
+  const [imageObjectUrls, setImageObjectUrls] = useState<string[]>([]);
   const [coverImageServerDataUrl, setCoverImageServerDataUrl] = useState<
     string | undefined
   >(undefined);
@@ -176,6 +182,7 @@ const Home: NextPage = () => {
   const [audioServerDataUrl, setAudioServerDataUrl] = useState<
     string | undefined
   >(undefined);
+  const [imageServerDataUrls, setImageServerDataUrls] = useState<string[]>([]);
   const [textColor, setTextColor] = useState<string | undefined>(
     defaultMyCompProps.textColor,
   );
@@ -206,6 +213,7 @@ const Home: NextPage = () => {
   const [showRings, setShowRings] = useState<boolean>(
     defaultMyCompProps.showRings ?? true,
   );
+  const [subtitles, setSubtitles] = useState<string[]>([]);
   const [works, setWorks] = useState<WorkItem[]>([]);
   const [selectedWorkId, setSelectedWorkId] = useState<string>("builtin");
 
@@ -266,15 +274,18 @@ const Home: NextPage = () => {
       setCoverVideoMediaId(undefined);
       setLogoImageMediaId(undefined);
       setAudioMediaId(undefined);
+      setImageMediaIds([]);
       setCoverImageUrl(defaultMyCompProps.coverImageUrl ?? "");
       setCoverVideoUrl(defaultMyCompProps.coverVideoDataUrl ?? "");
       setLogoImageUrl(defaultMyCompProps.logoImageUrl ?? "");
       setAudioDataUrl(defaultMyCompProps.audioDataUrl);
       setAudioUrl(defaultMyCompProps.audioDataUrl ?? "");
+      setImageUrls(defaultMyCompProps.imageArray ?? []);
       setCoverImageObjectUrl(undefined);
       setCoverVideoObjectUrl(undefined);
       setLogoImageObjectUrl(undefined);
       setAudioObjectUrl(undefined);
+      setImageObjectUrls([]);
       setBackgroundColor(defaultMyCompProps.backgroundColor);
       setTextColor(defaultMyCompProps.textColor);
       setAccentColor(defaultMyCompProps.accentColor);
@@ -288,6 +299,7 @@ const Home: NextPage = () => {
       setMediaPosition(defaultMyCompProps.mediaPosition ?? "center");
       setLayout(defaultMyCompProps.layout ?? "center");
       setShowRings(defaultMyCompProps.showRings ?? true);
+      setSubtitles(defaultMyCompProps.subtitles ?? []);
       return;
     }
     const selected = availableWorks.find((work) => work.id === selectedWorkId);
@@ -302,11 +314,13 @@ const Home: NextPage = () => {
       setCoverVideoMediaId(selected.coverVideoMediaId);
       setLogoImageMediaId(selected.logoImageMediaId);
       setAudioMediaId(selected.audioMediaId);
+      setImageMediaIds(selected.imageMediaIds ?? []);
       setCoverImageUrl(selected.coverImageUrl ?? "");
       setCoverVideoUrl(selected.coverVideoUrl ?? "");
       setLogoImageUrl(selected.logoImageUrl ?? "");
       setAudioDataUrl(selected.audioDataUrl);
       setAudioUrl(selected.audioUrl ?? "");
+      setImageUrls(selected.imageUrls ?? []);
       setBackgroundColor(selected.backgroundColor);
       setTextColor(selected.textColor);
       setAccentColor(selected.accentColor);
@@ -325,6 +339,7 @@ const Home: NextPage = () => {
       setMediaPosition(selected.mediaPosition ?? "center");
       setLayout(selected.layout ?? "center");
       setShowRings(selected.showRings ?? true);
+      setSubtitles(selected.subtitles ?? []);
     }
   }, [availableWorks, selectedWorkId]);
 
@@ -512,7 +527,54 @@ const Home: NextPage = () => {
     };
   }, [audioMediaId]);
 
+  useEffect(() => {
+    let active = true;
+    const objectUrls: string[] = [];
+    const run = async () => {
+      if (imageMediaIds.length === 0) {
+        setImageObjectUrls([]);
+        setImageServerDataUrls([]);
+        return;
+      }
+      try {
+        const nextObjectUrls: string[] = [];
+        const nextServerUrls: string[] = [];
+        for (const mediaId of imageMediaIds) {
+          const blob = await loadMediaBlob(mediaId);
+          if (!active) {
+            return;
+          }
+          if (!blob) {
+            continue;
+          }
+          const objectUrl = URL.createObjectURL(blob);
+          objectUrls.push(objectUrl);
+          nextObjectUrls.push(objectUrl);
+          const dataUrl = await blobToDataUrl(blob);
+          nextServerUrls.push(dataUrl);
+        }
+        if (active) {
+          setImageObjectUrls(nextObjectUrls);
+          setImageServerDataUrls(nextServerUrls);
+        }
+      } catch {
+        if (active) {
+          setImageObjectUrls([]);
+          setImageServerDataUrls([]);
+        }
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imageMediaIds]);
+
   const inputProps: z.infer<typeof CompositionProps> = useMemo(() => {
+    const resolvedImageUrls = imageUrls
+      .map((item) => item.trim())
+      .filter(Boolean);
     const resolvedCoverImage =
       coverImageUrl.trim().length > 0
         ? coverImageUrl.trim()
@@ -529,6 +591,7 @@ const Home: NextPage = () => {
       audioUrl.trim().length > 0
         ? audioUrl.trim()
         : audioObjectUrl ?? audioDataUrl;
+    const resolvedImageArray = [...imageObjectUrls, ...resolvedImageUrls];
     return {
       title: text,
       subtitle: subtitle || undefined,
@@ -536,6 +599,8 @@ const Home: NextPage = () => {
       coverImageDataUrl: resolvedCoverImage,
       coverVideoDataUrl: resolvedCoverVideo,
       logoImageDataUrl: resolvedLogoImage,
+      imageArray: resolvedImageArray.length > 0 ? resolvedImageArray : undefined,
+      subtitles: subtitles.length > 0 ? subtitles : undefined,
       audioDataUrl: resolvedAudio,
       backgroundColor,
       textColor,
@@ -563,6 +628,8 @@ const Home: NextPage = () => {
     coverVideoObjectUrl,
     coverVideoUrl,
     coverMediaType,
+    imageObjectUrls,
+    imageUrls,
     layout,
     logoImageDataUrl,
     logoImageObjectUrl,
@@ -572,6 +639,7 @@ const Home: NextPage = () => {
     showRings,
     subtitle,
     subtitleFontSize,
+    subtitles,
     text,
     textColor,
     titleFontSize,
@@ -579,6 +647,9 @@ const Home: NextPage = () => {
   ]);
 
   const serverInputProps: z.infer<typeof CompositionProps> = useMemo(() => {
+    const resolvedImageUrls = imageUrls
+      .map((item) => item.trim())
+      .filter(Boolean);
     const resolvedCoverImage =
       coverImageUrl.trim().length > 0
         ? coverImageUrl.trim()
@@ -595,6 +666,7 @@ const Home: NextPage = () => {
       audioUrl.trim().length > 0
         ? audioUrl.trim()
         : audioServerDataUrl ?? audioDataUrl;
+    const resolvedImageArray = [...imageServerDataUrls, ...resolvedImageUrls];
     return {
       title: text,
       subtitle: subtitle || undefined,
@@ -602,6 +674,8 @@ const Home: NextPage = () => {
       coverImageDataUrl: resolvedCoverImage,
       coverVideoDataUrl: resolvedCoverVideo,
       logoImageDataUrl: resolvedLogoImage,
+      imageArray: resolvedImageArray.length > 0 ? resolvedImageArray : undefined,
+      subtitles: subtitles.length > 0 ? subtitles : undefined,
       audioDataUrl: resolvedAudio,
       backgroundColor,
       textColor,
@@ -629,6 +703,8 @@ const Home: NextPage = () => {
     coverVideoServerDataUrl,
     coverVideoUrl,
     coverMediaType,
+    imageServerDataUrls,
+    imageUrls,
     layout,
     logoImageDataUrl,
     logoImageServerDataUrl,
@@ -638,6 +714,7 @@ const Home: NextPage = () => {
     showRings,
     subtitle,
     subtitleFontSize,
+    subtitles,
     text,
     textColor,
     titleFontSize,

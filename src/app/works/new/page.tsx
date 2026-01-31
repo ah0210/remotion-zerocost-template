@@ -18,11 +18,14 @@ type WorkItem = {
   coverVideoMediaId?: string;
   logoImageMediaId?: string;
   audioMediaId?: string;
+  imageMediaIds?: string[];
   coverImageUrl?: string;
   coverVideoUrl?: string;
   logoImageUrl?: string;
+  imageUrls?: string[];
   audioDataUrl?: string;
   audioUrl?: string;
+  subtitles?: string[];
   backgroundColor?: string;
   textColor?: string;
   accentColor?: string;
@@ -152,11 +155,13 @@ const NewWorkPage = () => {
   const [audioMediaId, setAudioMediaId] = useState<string | undefined>(
     undefined,
   );
+  const [imageMediaIds, setImageMediaIds] = useState<string[]>([]);
   const [coverImageUrl, setCoverImageUrl] = useState("");
   const [coverVideoUrl, setCoverVideoUrl] = useState("");
   const [logoImageUrl, setLogoImageUrl] = useState("");
   const [audioDataUrl, setAudioDataUrl] = useState<string | undefined>(undefined);
   const [audioUrl, setAudioUrl] = useState("");
+  const [imageUrlsInput, setImageUrlsInput] = useState("");
   const [coverImageObjectUrl, setCoverImageObjectUrl] = useState<
     string | undefined
   >(undefined);
@@ -169,6 +174,8 @@ const NewWorkPage = () => {
   const [audioObjectUrl, setAudioObjectUrl] = useState<string | undefined>(
     undefined,
   );
+  const [imageObjectUrls, setImageObjectUrls] = useState<string[]>([]);
+  const [subtitlesText, setSubtitlesText] = useState("");
   const [titleFontSize, setTitleFontSize] = useState("70");
   const [subtitleFontSize, setSubtitleFontSize] = useState("24");
   const [durationInFrames, setDurationInFrames] = useState(
@@ -252,6 +259,27 @@ const NewWorkPage = () => {
           showRings: false,
         },
       },
+      {
+        id: "template-wechat-video",
+        name: "视频号短片",
+        description: "高对比 + 适合短视频",
+        data: {
+          title: "视频号新品发布",
+          subtitle: "15 秒抓住观众注意力",
+          badgeText: "视频号推荐",
+          layout: "image-top" as const,
+          backgroundColor: "#0f172a",
+          textColor: "#f8fafc",
+          accentColor: "#38bdf8",
+          titleFontSize: 64,
+          subtitleFontSize: 22,
+          durationInFrames: 150,
+          coverMediaType: "image" as const,
+          mediaFit: "cover" as const,
+          mediaPosition: "center" as const,
+          showRings: false,
+        },
+      },
     ],
     [],
   );
@@ -287,6 +315,10 @@ const NewWorkPage = () => {
     setCoverVideoObjectUrl(undefined);
     setLogoImageObjectUrl(undefined);
     setAudioObjectUrl(undefined);
+    setImageMediaIds([]);
+    setImageObjectUrls([]);
+    setImageUrlsInput("");
+    setSubtitlesText("");
     setSuccess("已套用模板，可继续调整。");
     setError("");
   };
@@ -319,11 +351,14 @@ const NewWorkPage = () => {
     setCoverVideoMediaId(target.coverVideoMediaId);
     setLogoImageMediaId(target.logoImageMediaId);
     setAudioMediaId(target.audioMediaId);
+    setImageMediaIds(target.imageMediaIds ?? []);
     setCoverImageUrl(target.coverImageUrl ?? "");
     setCoverVideoUrl(target.coverVideoUrl ?? "");
     setLogoImageUrl(target.logoImageUrl ?? "");
     setAudioDataUrl(target.audioDataUrl);
     setAudioUrl(target.audioUrl ?? "");
+    setImageUrlsInput((target.imageUrls ?? []).join("\n"));
+    setSubtitlesText((target.subtitles ?? []).join("\n"));
     setTitleFontSize(String(target.titleFontSize ?? 70));
     setSubtitleFontSize(String(target.subtitleFontSize ?? 24));
     setDurationInFrames(String(target.durationInFrames ?? DURATION_IN_FRAMES));
@@ -490,6 +525,44 @@ const NewWorkPage = () => {
     };
   }, [audioMediaId]);
 
+  useEffect(() => {
+    let active = true;
+    const objectUrls: string[] = [];
+    const run = async () => {
+      if (imageMediaIds.length === 0) {
+        setImageObjectUrls([]);
+        return;
+      }
+      try {
+        const nextObjectUrls: string[] = [];
+        for (const mediaId of imageMediaIds) {
+          const blob = await loadMediaBlob(mediaId);
+          if (!active) {
+            return;
+          }
+          if (!blob) {
+            continue;
+          }
+          const objectUrl = URL.createObjectURL(blob);
+          objectUrls.push(objectUrl);
+          nextObjectUrls.push(objectUrl);
+        }
+        if (active) {
+          setImageObjectUrls(nextObjectUrls);
+        }
+      } catch {
+        if (active) {
+          setImageObjectUrls([]);
+        }
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imageMediaIds]);
+
   const previewStyle = useMemo(() => {
     return {
       backgroundColor,
@@ -498,6 +571,12 @@ const NewWorkPage = () => {
   const resolvedTitleFontSize = Number(titleFontSize) || 70;
   const resolvedSubtitleFontSize = Number(subtitleFontSize) || 24;
   const resolvedDurationInFrames = Number(durationInFrames) || DURATION_IN_FRAMES;
+  const resolvedImageUrls = useMemo(() => {
+    return imageUrlsInput
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }, [imageUrlsInput]);
   const resolvedCoverImage =
     coverImageUrl.trim().length > 0
       ? coverImageUrl.trim()
@@ -514,12 +593,17 @@ const NewWorkPage = () => {
     audioUrl.trim().length > 0
       ? audioUrl.trim()
       : audioObjectUrl ?? audioDataUrl;
+  const resolvedImageArray = useMemo(() => {
+    return [...imageObjectUrls, ...resolvedImageUrls];
+  }, [imageObjectUrls, resolvedImageUrls]);
   const previewMediaType =
-    coverMediaType === "video" && resolvedCoverVideo
-      ? "video"
-      : resolvedCoverImage
-        ? "image"
-        : "empty";
+    resolvedImageArray.length > 0
+      ? "multi-image"
+      : coverMediaType === "video" && resolvedCoverVideo
+        ? "video"
+        : resolvedCoverImage
+          ? "image"
+          : "empty";
 
   const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = async (
     e,
@@ -639,6 +723,28 @@ const NewWorkPage = () => {
     }
   };
 
+  const handleMultiImageChange: React.ChangeEventHandler<HTMLInputElement> =
+    async (e) => {
+      const files = Array.from(e.currentTarget.files ?? []);
+      if (files.length === 0) {
+        setImageMediaIds([]);
+        setImageObjectUrls([]);
+        return;
+      }
+      try {
+        const mediaIds: string[] = [];
+        for (const file of files) {
+          const mediaId = await storeMediaBlob(file);
+          mediaIds.push(mediaId);
+        }
+        setImageMediaIds(mediaIds);
+      } catch {
+        setError("多图素材保存失败，请改用链接或更小的文件。");
+        setImageMediaIds([]);
+        setImageObjectUrls([]);
+      }
+    };
+
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     setError("");
@@ -660,6 +766,10 @@ const NewWorkPage = () => {
       setError("视频时长必须大于 0。");
       return;
     }
+    const resolvedSubtitles = subtitlesText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
 
     const works = readWorks();
     if (editingId) {
@@ -677,11 +787,14 @@ const NewWorkPage = () => {
               coverVideoMediaId,
               logoImageMediaId,
               audioMediaId,
+              imageMediaIds: imageMediaIds.length > 0 ? imageMediaIds : undefined,
               coverImageUrl: coverImageUrl.trim() || undefined,
               coverVideoUrl: coverVideoUrl.trim() || undefined,
               logoImageUrl: logoImageUrl.trim() || undefined,
               audioDataUrl,
               audioUrl: audioUrl.trim() || undefined,
+              imageUrls: resolvedImageUrls.length > 0 ? resolvedImageUrls : undefined,
+              subtitles: resolvedSubtitles.length > 0 ? resolvedSubtitles : undefined,
               backgroundColor,
               textColor,
               accentColor,
@@ -723,11 +836,14 @@ const NewWorkPage = () => {
       coverVideoMediaId,
       logoImageMediaId,
       audioMediaId,
+      imageMediaIds: imageMediaIds.length > 0 ? imageMediaIds : undefined,
       coverImageUrl: coverImageUrl.trim() || undefined,
       coverVideoUrl: coverVideoUrl.trim() || undefined,
       logoImageUrl: logoImageUrl.trim() || undefined,
       audioDataUrl,
       audioUrl: audioUrl.trim() || undefined,
+      imageUrls: resolvedImageUrls.length > 0 ? resolvedImageUrls : undefined,
+      subtitles: resolvedSubtitles.length > 0 ? resolvedSubtitles : undefined,
       backgroundColor,
       textColor,
       accentColor,
@@ -983,6 +1099,25 @@ const NewWorkPage = () => {
           />
         </label>
         <label className="flex flex-col gap-2 text-sm text-foreground">
+          多图素材链接（每行一条）
+          <textarea
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none min-h-[96px]"
+            value={imageUrlsInput}
+            onChange={(e) => setImageUrlsInput(e.currentTarget.value)}
+            placeholder="https://...&#10;https://..."
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          上传多张图片
+          <input
+            className="text-sm"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleMultiImageChange}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
           视频素材链接
           <input
             className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
@@ -1050,6 +1185,15 @@ const NewWorkPage = () => {
             type="file"
             accept="image/*"
             onChange={handleLogoChange}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          字幕内容（每行一句）
+          <textarea
+            className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none min-h-[96px]"
+            value={subtitlesText}
+            onChange={(e) => setSubtitlesText(e.currentTarget.value)}
+            placeholder="第一句字幕&#10;第二句字幕"
           />
         </label>
         <label className="flex items-center gap-2 text-sm text-foreground">
@@ -1134,6 +1278,21 @@ const NewWorkPage = () => {
                   autoPlay
                   style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
                 />
+              ) : previewMediaType === "multi-image" && resolvedImageArray[0] ? (
+                <div className="flex flex-col items-center gap-2">
+                  <Image
+                    src={resolvedImageArray[0]}
+                    alt="作品素材预览"
+                    width={220}
+                    height={140}
+                    className="w-[220px] h-[140px] rounded-xl shadow-md"
+                    style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
+                    unoptimized
+                  />
+                  <div className="text-[11px] text-subtitle">
+                    共 {resolvedImageArray.length} 张
+                  </div>
+                </div>
               ) : previewMediaType === "image" && resolvedCoverImage ? (
                 <Image
                   src={resolvedCoverImage}
@@ -1162,6 +1321,21 @@ const NewWorkPage = () => {
                   autoPlay
                   style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
                 />
+              ) : previewMediaType === "multi-image" && resolvedImageArray[0] ? (
+                <div className="flex flex-col items-center gap-2">
+                  <Image
+                    src={resolvedImageArray[0]}
+                    alt="作品素材预览"
+                    width={320}
+                    height={180}
+                    className="w-[320px] h-[180px] rounded-xl shadow-md"
+                    style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
+                    unoptimized
+                  />
+                  <div className="text-[11px] text-subtitle">
+                    共 {resolvedImageArray.length} 张
+                  </div>
+                </div>
               ) : previewMediaType === "image" && resolvedCoverImage ? (
                 <Image
                   src={resolvedCoverImage}
@@ -1266,6 +1440,21 @@ const NewWorkPage = () => {
                 autoPlay
                 style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
               />
+              ) : previewMediaType === "multi-image" && resolvedImageArray[0] ? (
+                <div className="flex flex-col items-center gap-2">
+                  <Image
+                  src={resolvedImageArray[0]}
+                    alt="作品素材预览"
+                    width={320}
+                    height={180}
+                    className="w-[320px] h-[180px] rounded-xl shadow-md"
+                    style={{ objectFit: mediaFit, objectPosition: mediaPosition }}
+                    unoptimized
+                  />
+                  <div className="text-[11px] text-subtitle">
+                    共 {resolvedImageArray.length} 张
+                  </div>
+                </div>
               ) : previewMediaType === "image" && resolvedCoverImage ? (
                 <Image
                 src={resolvedCoverImage}
