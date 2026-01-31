@@ -14,6 +14,10 @@ type WorkItem = {
   coverImageDataUrl?: string;
   coverVideoDataUrl?: string;
   logoImageDataUrl?: string;
+  coverImageMediaId?: string;
+  coverVideoMediaId?: string;
+  logoImageMediaId?: string;
+  audioMediaId?: string;
   coverImageUrl?: string;
   coverVideoUrl?: string;
   logoImageUrl?: string;
@@ -35,6 +39,8 @@ type WorkItem = {
 };
 
 const STORAGE_KEY = "remotion-works";
+const MEDIA_DB = "remotion-media";
+const MEDIA_STORE = "assets";
 
 const readWorks = (): WorkItem[] => {
   if (typeof window === "undefined") {
@@ -56,7 +62,61 @@ const writeWorks = (works: WorkItem[]) => {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(works));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(works));
+  } catch {
+    throw new Error("写入存储失败");
+  }
+};
+
+const openMediaDb = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("IndexedDB 不可用"));
+      return;
+    }
+    const request = indexedDB.open(MEDIA_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(MEDIA_STORE)) {
+        db.createObjectStore(MEDIA_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error("打开存储失败"));
+  });
+};
+
+const storeMediaBlob = async (blob: Blob): Promise<string> => {
+  const db = await openMediaDb();
+  const mediaId = `media_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(MEDIA_STORE, "readwrite");
+    const store = tx.objectStore(MEDIA_STORE);
+    const request = store.put(blob, mediaId);
+    request.onsuccess = () => resolve();
+    request.onerror = () =>
+      reject(request.error ?? new Error("保存素材失败"));
+    tx.onabort = () => reject(tx.error ?? new Error("保存素材失败"));
+  });
+  db.close();
+  return mediaId;
+};
+
+const loadMediaBlob = async (mediaId: string): Promise<Blob | undefined> => {
+  const db = await openMediaDb();
+  const blob = await new Promise<Blob | undefined>((resolve, reject) => {
+    const tx = db.transaction(MEDIA_STORE, "readonly");
+    const store = tx.objectStore(MEDIA_STORE);
+    const request = store.get(mediaId);
+    request.onsuccess = () => resolve(request.result as Blob | undefined);
+    request.onerror = () =>
+      reject(request.error ?? new Error("读取素材失败"));
+  });
+  db.close();
+  return blob;
 };
 
 const NewWorkPage = () => {
@@ -80,11 +140,35 @@ const NewWorkPage = () => {
   const [logoImageDataUrl, setLogoImageDataUrl] = useState<string | undefined>(
     undefined,
   );
+  const [coverImageMediaId, setCoverImageMediaId] = useState<
+    string | undefined
+  >(undefined);
+  const [coverVideoMediaId, setCoverVideoMediaId] = useState<
+    string | undefined
+  >(undefined);
+  const [logoImageMediaId, setLogoImageMediaId] = useState<string | undefined>(
+    undefined,
+  );
+  const [audioMediaId, setAudioMediaId] = useState<string | undefined>(
+    undefined,
+  );
   const [coverImageUrl, setCoverImageUrl] = useState("");
   const [coverVideoUrl, setCoverVideoUrl] = useState("");
   const [logoImageUrl, setLogoImageUrl] = useState("");
   const [audioDataUrl, setAudioDataUrl] = useState<string | undefined>(undefined);
   const [audioUrl, setAudioUrl] = useState("");
+  const [coverImageObjectUrl, setCoverImageObjectUrl] = useState<
+    string | undefined
+  >(undefined);
+  const [coverVideoObjectUrl, setCoverVideoObjectUrl] = useState<
+    string | undefined
+  >(undefined);
+  const [logoImageObjectUrl, setLogoImageObjectUrl] = useState<
+    string | undefined
+  >(undefined);
+  const [audioObjectUrl, setAudioObjectUrl] = useState<string | undefined>(
+    undefined,
+  );
   const [titleFontSize, setTitleFontSize] = useState("70");
   const [subtitleFontSize, setSubtitleFontSize] = useState("24");
   const [durationInFrames, setDurationInFrames] = useState(
@@ -189,12 +273,20 @@ const NewWorkPage = () => {
     setShowRings(template.data.showRings);
     setCoverImageDataUrl(undefined);
     setCoverVideoDataUrl(undefined);
+    setCoverImageMediaId(undefined);
+    setCoverVideoMediaId(undefined);
+    setLogoImageMediaId(undefined);
+    setAudioMediaId(undefined);
     setCoverImageUrl("");
     setCoverVideoUrl("");
     setLogoImageDataUrl(undefined);
     setLogoImageUrl("");
     setAudioDataUrl(undefined);
     setAudioUrl("");
+    setCoverImageObjectUrl(undefined);
+    setCoverVideoObjectUrl(undefined);
+    setLogoImageObjectUrl(undefined);
+    setAudioObjectUrl(undefined);
     setSuccess("已套用模板，可继续调整。");
     setError("");
   };
@@ -223,6 +315,10 @@ const NewWorkPage = () => {
     setCoverImageDataUrl(target.coverImageDataUrl);
     setCoverVideoDataUrl(target.coverVideoDataUrl);
     setLogoImageDataUrl(target.logoImageDataUrl);
+    setCoverImageMediaId(target.coverImageMediaId);
+    setCoverVideoMediaId(target.coverVideoMediaId);
+    setLogoImageMediaId(target.logoImageMediaId);
+    setAudioMediaId(target.audioMediaId);
     setCoverImageUrl(target.coverImageUrl ?? "");
     setCoverVideoUrl(target.coverVideoUrl ?? "");
     setLogoImageUrl(target.logoImageUrl ?? "");
@@ -238,6 +334,162 @@ const NewWorkPage = () => {
     setAddToRenderPage(target.addToRenderPage);
   }, [searchParams]);
 
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | undefined;
+    const run = async () => {
+      if (!coverImageMediaId) {
+        setCoverImageObjectUrl(undefined);
+        return;
+      }
+      try {
+        const blob = await loadMediaBlob(coverImageMediaId);
+        if (!active) {
+          return;
+        }
+        if (!blob) {
+          setCoverImageObjectUrl(undefined);
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setCoverImageObjectUrl((prev) => {
+          if (prev) {
+            URL.revokeObjectURL(prev);
+          }
+          return objectUrl;
+        });
+      } catch {
+        if (active) {
+          setCoverImageObjectUrl(undefined);
+        }
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [coverImageMediaId]);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | undefined;
+    const run = async () => {
+      if (!coverVideoMediaId) {
+        setCoverVideoObjectUrl(undefined);
+        return;
+      }
+      try {
+        const blob = await loadMediaBlob(coverVideoMediaId);
+        if (!active) {
+          return;
+        }
+        if (!blob) {
+          setCoverVideoObjectUrl(undefined);
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setCoverVideoObjectUrl((prev) => {
+          if (prev) {
+            URL.revokeObjectURL(prev);
+          }
+          return objectUrl;
+        });
+      } catch {
+        if (active) {
+          setCoverVideoObjectUrl(undefined);
+        }
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [coverVideoMediaId]);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | undefined;
+    const run = async () => {
+      if (!logoImageMediaId) {
+        setLogoImageObjectUrl(undefined);
+        return;
+      }
+      try {
+        const blob = await loadMediaBlob(logoImageMediaId);
+        if (!active) {
+          return;
+        }
+        if (!blob) {
+          setLogoImageObjectUrl(undefined);
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setLogoImageObjectUrl((prev) => {
+          if (prev) {
+            URL.revokeObjectURL(prev);
+          }
+          return objectUrl;
+        });
+      } catch {
+        if (active) {
+          setLogoImageObjectUrl(undefined);
+        }
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [logoImageMediaId]);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | undefined;
+    const run = async () => {
+      if (!audioMediaId) {
+        setAudioObjectUrl(undefined);
+        return;
+      }
+      try {
+        const blob = await loadMediaBlob(audioMediaId);
+        if (!active) {
+          return;
+        }
+        if (!blob) {
+          setAudioObjectUrl(undefined);
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setAudioObjectUrl((prev) => {
+          if (prev) {
+            URL.revokeObjectURL(prev);
+          }
+          return objectUrl;
+        });
+      } catch {
+        if (active) {
+          setAudioObjectUrl(undefined);
+        }
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [audioMediaId]);
+
   const previewStyle = useMemo(() => {
     return {
       backgroundColor,
@@ -247,13 +499,21 @@ const NewWorkPage = () => {
   const resolvedSubtitleFontSize = Number(subtitleFontSize) || 24;
   const resolvedDurationInFrames = Number(durationInFrames) || DURATION_IN_FRAMES;
   const resolvedCoverImage =
-    coverImageUrl.trim().length > 0 ? coverImageUrl.trim() : coverImageDataUrl;
+    coverImageUrl.trim().length > 0
+      ? coverImageUrl.trim()
+      : coverImageObjectUrl ?? coverImageDataUrl;
   const resolvedCoverVideo =
-    coverVideoUrl.trim().length > 0 ? coverVideoUrl.trim() : coverVideoDataUrl;
+    coverVideoUrl.trim().length > 0
+      ? coverVideoUrl.trim()
+      : coverVideoObjectUrl ?? coverVideoDataUrl;
   const resolvedLogoImage =
-    logoImageUrl.trim().length > 0 ? logoImageUrl.trim() : logoImageDataUrl;
+    logoImageUrl.trim().length > 0
+      ? logoImageUrl.trim()
+      : logoImageObjectUrl ?? logoImageDataUrl;
   const resolvedAudio =
-    audioUrl.trim().length > 0 ? audioUrl.trim() : audioDataUrl;
+    audioUrl.trim().length > 0
+      ? audioUrl.trim()
+      : audioObjectUrl ?? audioDataUrl;
   const previewMediaType =
     coverMediaType === "video" && resolvedCoverVideo
       ? "video"
@@ -261,70 +521,122 @@ const NewWorkPage = () => {
         ? "image"
         : "empty";
 
-  const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+  const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = async (
+    e,
+  ) => {
     const file = e.currentTarget.files?.[0];
     if (!file) {
       setCoverImageDataUrl(undefined);
+      setCoverImageMediaId(undefined);
+      setCoverImageObjectUrl(undefined);
       return;
     }
     setCoverMediaType("image");
     setCoverImageUrl("");
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setCoverImageDataUrl(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setCoverImageDataUrl(undefined);
+    try {
+      const mediaId = await storeMediaBlob(file);
+      const objectUrl = URL.createObjectURL(file);
+      setCoverImageMediaId(mediaId);
+      setCoverImageObjectUrl((prev) => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return objectUrl;
+      });
+    } catch {
+      setError("封面素材保存失败，请改用链接或更小的文件。");
+      setCoverImageMediaId(undefined);
+      setCoverImageObjectUrl(undefined);
+    }
   };
 
-  const handleVideoChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+  const handleVideoChange: React.ChangeEventHandler<HTMLInputElement> = async (
+    e,
+  ) => {
     const file = e.currentTarget.files?.[0];
     if (!file) {
       setCoverVideoDataUrl(undefined);
+      setCoverVideoMediaId(undefined);
+      setCoverVideoObjectUrl(undefined);
       return;
     }
     setCoverMediaType("video");
     setCoverVideoUrl("");
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setCoverVideoDataUrl(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setCoverVideoDataUrl(undefined);
+    try {
+      const mediaId = await storeMediaBlob(file);
+      const objectUrl = URL.createObjectURL(file);
+      setCoverVideoMediaId(mediaId);
+      setCoverVideoObjectUrl((prev) => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return objectUrl;
+      });
+    } catch {
+      setError("视频素材保存失败，请改用链接或更小的文件。");
+      setCoverVideoMediaId(undefined);
+      setCoverVideoObjectUrl(undefined);
+    }
   };
 
-  const handleAudioChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+  const handleAudioChange: React.ChangeEventHandler<HTMLInputElement> = async (
+    e,
+  ) => {
     const file = e.currentTarget.files?.[0];
     if (!file) {
       setAudioDataUrl(undefined);
+      setAudioMediaId(undefined);
+      setAudioObjectUrl(undefined);
       return;
     }
     setAudioUrl("");
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setAudioDataUrl(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setAudioDataUrl(undefined);
+    try {
+      const mediaId = await storeMediaBlob(file);
+      const objectUrl = URL.createObjectURL(file);
+      setAudioMediaId(mediaId);
+      setAudioObjectUrl((prev) => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return objectUrl;
+      });
+    } catch {
+      setError("音频素材保存失败，请改用链接或更小的文件。");
+      setAudioMediaId(undefined);
+      setAudioObjectUrl(undefined);
+    }
   };
 
-  const handleLogoChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+  const handleLogoChange: React.ChangeEventHandler<HTMLInputElement> = async (
+    e,
+  ) => {
     const file = e.currentTarget.files?.[0];
     if (!file) {
       setLogoImageDataUrl(undefined);
+      setLogoImageMediaId(undefined);
+      setLogoImageObjectUrl(undefined);
       return;
     }
     setLogoImageUrl("");
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setLogoImageDataUrl(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setLogoImageDataUrl(undefined);
+    try {
+      const mediaId = await storeMediaBlob(file);
+      const objectUrl = URL.createObjectURL(file);
+      setLogoImageMediaId(mediaId);
+      setLogoImageObjectUrl((prev) => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return objectUrl;
+      });
+    } catch {
+      setError("徽标素材保存失败，请改用链接或更小的文件。");
+      setLogoImageMediaId(undefined);
+      setLogoImageObjectUrl(undefined);
+    }
   };
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
@@ -361,6 +673,10 @@ const NewWorkPage = () => {
               coverImageDataUrl,
               coverVideoDataUrl,
               logoImageDataUrl,
+              coverImageMediaId,
+              coverVideoMediaId,
+              logoImageMediaId,
+              audioMediaId,
               coverImageUrl: coverImageUrl.trim() || undefined,
               coverVideoUrl: coverVideoUrl.trim() || undefined,
               logoImageUrl: logoImageUrl.trim() || undefined,
@@ -381,7 +697,12 @@ const NewWorkPage = () => {
             }
           : work,
       );
-      writeWorks(nextWorks);
+      try {
+        writeWorks(nextWorks);
+      } catch {
+        setError("保存失败：本地存储空间不足，请删除旧作品或改用链接。");
+        return;
+      }
       if (addToRenderPage) {
         router.push(`/?workId=${editingId}`);
         return;
@@ -398,6 +719,10 @@ const NewWorkPage = () => {
       coverImageDataUrl,
       coverVideoDataUrl,
       logoImageDataUrl,
+      coverImageMediaId,
+      coverVideoMediaId,
+      logoImageMediaId,
+      audioMediaId,
       coverImageUrl: coverImageUrl.trim() || undefined,
       coverVideoUrl: coverVideoUrl.trim() || undefined,
       logoImageUrl: logoImageUrl.trim() || undefined,
@@ -418,7 +743,12 @@ const NewWorkPage = () => {
       createdAt: Date.now(),
     };
 
-    writeWorks([newWork, ...works]);
+    try {
+      writeWorks([newWork, ...works]);
+    } catch {
+      setError("保存失败：本地存储空间不足，请删除旧作品或改用链接。");
+      return;
+    }
 
     if (addToRenderPage) {
       router.push(`/?workId=${newWork.id}`);
@@ -636,6 +966,9 @@ const NewWorkPage = () => {
             onChange={(e) => {
               setCoverImageUrl(e.currentTarget.value);
               setCoverMediaType("image");
+              setCoverImageDataUrl(undefined);
+              setCoverImageMediaId(undefined);
+              setCoverImageObjectUrl(undefined);
             }}
             placeholder="https://..."
           />
@@ -657,6 +990,9 @@ const NewWorkPage = () => {
             onChange={(e) => {
               setCoverVideoUrl(e.currentTarget.value);
               setCoverMediaType("video");
+              setCoverVideoDataUrl(undefined);
+              setCoverVideoMediaId(undefined);
+              setCoverVideoObjectUrl(undefined);
             }}
             placeholder="https://..."
           />
@@ -675,7 +1011,12 @@ const NewWorkPage = () => {
           <input
             className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
             value={audioUrl}
-            onChange={(e) => setAudioUrl(e.currentTarget.value)}
+            onChange={(e) => {
+              setAudioUrl(e.currentTarget.value);
+              setAudioDataUrl(undefined);
+              setAudioMediaId(undefined);
+              setAudioObjectUrl(undefined);
+            }}
             placeholder="https://..."
           />
         </label>
@@ -693,7 +1034,12 @@ const NewWorkPage = () => {
           <input
             className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
             value={logoImageUrl}
-            onChange={(e) => setLogoImageUrl(e.currentTarget.value)}
+            onChange={(e) => {
+              setLogoImageUrl(e.currentTarget.value);
+              setLogoImageDataUrl(undefined);
+              setLogoImageMediaId(undefined);
+              setLogoImageObjectUrl(undefined);
+            }}
             placeholder="https://..."
           />
         </label>
