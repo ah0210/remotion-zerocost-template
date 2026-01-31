@@ -920,18 +920,18 @@ const Home: NextPage = () => {
                   <div className="flex flex-wrap gap-2">
                     <Link
                       href={`/works/new?workId=${work.id}`}
-                      className="text-xs border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
+                      className="text-xs text-foreground border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
                     >
                       编辑
                     </Link>
                     <button
-                      className="text-xs border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
+                      className="text-xs text-foreground border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
                       onClick={() => handleToggleRenderPage(work.id)}
                     >
                       {work.addToRenderPage ? "从渲染页移除" : "加入渲染页"}
                     </button>
                     <button
-                      className="text-xs border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
+                      className="text-xs text-foreground border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
                       onClick={() => handleDeleteWork(work.id)}
                     >
                       删除
