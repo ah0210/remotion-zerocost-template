@@ -1076,124 +1076,132 @@ const Home: NextPage = () => {
   };
 
   return (
-    <div>
-      <div className="max-w-screen-md m-auto mb-5">
-        <div className="overflow-hidden rounded-geist shadow-[0_0_200px_rgba(0,0,0,0.15)] mb-10 mt-16">
-          <Player
-            component={Main}
-            inputProps={inputProps}
-            durationInFrames={durationInFrames}
-            fps={VIDEO_FPS}
-            compositionHeight={VIDEO_HEIGHT}
-            compositionWidth={VIDEO_WIDTH}
-            style={{
-              // Can't use tailwind class for width since player's default styles take presedence over tailwind's,
-              // but not over inline styles
-              width: "100%",
-            }}
-            controls
-            autoPlay
-            loop
-          />
-        </div>
-        <div className="border border-unfocused-border-color p-geist rounded-geist bg-background font-geist mb-6 flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <span className="text-sm text-foreground font-medium">选择作品</span>
-            <select
-              className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
-              value={selectedWorkId}
-              onChange={(e) => setSelectedWorkId(e.currentTarget.value)}
-            >
-              <option value="builtin">内置示例作品</option>
-              {availableWorks.map((work) => (
-                <option value={work.id} key={work.id}>
-                  {work.title ?? "未命名作品"}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/works/new"
-              className="border-foreground border rounded-geist bg-foreground text-background px-geist-half font-geist h-10 font-medium transition-all duration-150 ease-in-out inline-flex items-center text-sm hover:bg-background hover:text-foreground hover:border-focused-border-color"
-            >
-              新增作品
-            </Link>
-            <div className="text-xs text-subtitle flex items-center">
-              新增作品后可在此处选择并渲染
+    <div className="min-h-screen supports-[height:100dvh]:min-h-[100dvh] bg-background text-foreground">
+      <div className="mx-auto w-full max-w-screen-xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8 supports-[padding:env(safe-area-inset-top)]:pt-[calc(env(safe-area-inset-top)+1.5rem)] supports-[padding:env(safe-area-inset-bottom)]:pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
+        <div className="grid gap-6 lg:gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+          <div className="flex flex-col gap-6">
+            <div className="overflow-hidden rounded-geist shadow-[0_0_200px_rgba(0,0,0,0.15)] bg-background">
+              <div className="w-full aspect-video">
+                <Player
+                  component={Main}
+                  inputProps={inputProps}
+                  durationInFrames={durationInFrames}
+                  fps={VIDEO_FPS}
+                  compositionHeight={VIDEO_HEIGHT}
+                  compositionWidth={VIDEO_WIDTH}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                  }}
+                  controls
+                  autoPlay
+                  loop
+                />
+              </div>
+            </div>
+            <div className="border border-unfocused-border-color p-geist rounded-geist bg-background font-geist">
+              <h3 className="text-foreground font-bold text-base mb-3">
+                使用帮助
+              </h3>
+              <ol className="text-sm leading-6 text-subtitle list-decimal pl-5 space-y-2">
+                <li>在输入框中填写你的视频标题。</li>
+                <li>按需调整素材与样式设置。</li>
+                <li>点击“开始渲染”，等待进度完成。</li>
+                <li>渲染完成后点击“下载视频”保存到本地。</li>
+                <li>需要重新生成时，点击“重新开始”。</li>
+              </ol>
             </div>
           </div>
-          {works.length > 0 ? (
-            <div className="border-t border-unfocused-border-color pt-4 flex flex-col gap-3">
-              <div className="text-sm font-medium text-foreground">作品管理</div>
-              {works.map((work) => (
-                <div
-                  key={work.id}
-                  className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-sm"
+          <div className="flex flex-col gap-6 lg:sticky lg:top-8 self-start">
+            <div className="border border-unfocused-border-color p-geist rounded-geist bg-background font-geist flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <span className="text-sm text-foreground font-medium">
+                  选择作品
+                </span>
+                <select
+                  className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+                  value={selectedWorkId}
+                  onChange={(e) => setSelectedWorkId(e.currentTarget.value)}
                 >
-                  <div className="flex-1">
-                    <div className="text-foreground font-medium">
+                  <option value="builtin">内置示例作品</option>
+                  {availableWorks.map((work) => (
+                    <option value={work.id} key={work.id}>
                       {work.title ?? "未命名作品"}
-                    </div>
-                    <div className="text-xs text-subtitle">
-                      {work.addToRenderPage ? "已加入渲染页" : "未加入渲染页"}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Link
-                      href={`/works/new?workId=${work.id}`}
-                      className="text-xs text-foreground border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
-                    >
-                      编辑
-                    </Link>
-                    <button
-                      className="text-xs text-foreground border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
-                      onClick={() => handleToggleRenderPage(work.id)}
-                    >
-                      {work.addToRenderPage ? "从渲染页移除" : "加入渲染页"}
-                    </button>
-                    <button
-                      className="text-xs text-foreground border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
-                      onClick={() => handleDeleteWork(work.id)}
-                    >
-                      删除
-                    </button>
-                  </div>
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href="/works/new"
+                  className="border-foreground border rounded-geist bg-foreground text-background px-geist-half font-geist h-10 font-medium transition-all duration-150 ease-in-out inline-flex items-center text-sm hover:bg-background hover:text-foreground hover:border-focused-border-color"
+                >
+                  新增作品
+                </Link>
+                <div className="text-xs text-subtitle flex items-center">
+                  新增作品后可在此处选择并渲染
                 </div>
-              ))}
+              </div>
+              {works.length > 0 ? (
+                <div className="border-t border-unfocused-border-color pt-4 flex flex-col gap-3">
+                  <div className="text-sm font-medium text-foreground">
+                    作品管理
+                  </div>
+                  {works.map((work) => (
+                    <div
+                      key={work.id}
+                      className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-sm"
+                    >
+                      <div className="flex-1">
+                        <div className="text-foreground font-medium">
+                          {work.title ?? "未命名作品"}
+                        </div>
+                        <div className="text-xs text-subtitle">
+                          {work.addToRenderPage ? "已加入渲染页" : "未加入渲染页"}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          href={`/works/new?workId=${work.id}`}
+                          className="text-xs text-foreground border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
+                        >
+                          编辑
+                        </Link>
+                        <button
+                          className="text-xs text-foreground border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
+                          onClick={() => handleToggleRenderPage(work.id)}
+                        >
+                          {work.addToRenderPage ? "从渲染页移除" : "加入渲染页"}
+                        </button>
+                        <button
+                          className="text-xs text-foreground border border-unfocused-border-color rounded-geist px-2 py-1 hover:border-focused-border-color"
+                          onClick={() => handleDeleteWork(work.id)}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
-          ) : null}
+            <RenderControls
+              key={`render-${selectedWorkId}`}
+              text={text}
+              setText={setText}
+              inputProps={inputProps}
+              composition={{
+                component: Main,
+                id: COMP_NAME,
+                width: VIDEO_WIDTH,
+                height: VIDEO_HEIGHT,
+                fps: VIDEO_FPS,
+                durationInFrames,
+                defaultProps: defaultMyCompProps,
+              }}
+            ></RenderControls>
+          </div>
         </div>
-        <RenderControls
-          key={`render-${selectedWorkId}`}
-          text={text}
-          setText={setText}
-          inputProps={inputProps}
-          composition={{
-            component: Main,
-            id: COMP_NAME,
-            width: VIDEO_WIDTH,
-            height: VIDEO_HEIGHT,
-            fps: VIDEO_FPS,
-            durationInFrames,
-            defaultProps: defaultMyCompProps,
-          }}
-        ></RenderControls>
-        <Spacing></Spacing>
-        <Spacing></Spacing>
-        <div className="border border-unfocused-border-color p-geist rounded-geist bg-background font-geist">
-          <h3 className="text-foreground font-bold text-base mb-3">
-            使用帮助
-          </h3>
-          <ol className="text-sm leading-6 text-subtitle list-decimal pl-5 space-y-2">
-            <li>在输入框中填写你的视频标题。</li>
-            <li>选择渲染方式：浏览器渲染或服务器渲染。</li>
-            <li>点击“开始渲染”，等待进度完成。</li>
-            <li>渲染完成后点击“下载视频”保存到本地。</li>
-            <li>需要重新生成时，点击“重新开始”。</li>
-          </ol>
-        </div>
-        <Spacing></Spacing>
         <Spacing></Spacing>
         <Spacing></Spacing>
         <Tips></Tips>
