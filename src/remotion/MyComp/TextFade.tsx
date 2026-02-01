@@ -9,7 +9,9 @@ import {
 
 export const TextFade: React.FC<{
   children: React.ReactNode;
-}> = ({ children }) => {
+  centered?: boolean;
+  enableMask?: boolean;
+}> = ({ children, centered = true, enableMask = true }) => {
   const { fps } = useVideoConfig();
   const frame = useCurrentFrame();
 
@@ -29,16 +31,19 @@ export const TextFade: React.FC<{
   const maskImage = `linear-gradient(-45deg, transparent ${leftStop}%, black ${rightStop}%)`;
 
   const content: React.CSSProperties = useMemo(() => {
+    if (!enableMask) {
+      return {};
+    }
     return {
       maskImage,
       WebkitMaskImage: maskImage,
     };
-  }, [maskImage]);
+  }, [enableMask, maskImage]);
 
   return (
-    <AbsoluteFill>
-      <AbsoluteFill className="justify-center items-center">
-        <div style={content}>{children}</div>
+    <AbsoluteFill style={content}>
+      <AbsoluteFill className={centered ? "justify-center items-center" : ""}>
+        {children}
       </AbsoluteFill>
     </AbsoluteFill>
   );

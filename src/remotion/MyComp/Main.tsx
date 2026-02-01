@@ -209,10 +209,7 @@ export const Main = ({
     ),
   );
   const contentStart = coverDisplayDuration;
-  const showTitleInContent =
-    resolvedTitleDisplayFrames > 0 &&
-    frame >= contentStart &&
-    frame < contentStart + resolvedTitleDisplayFrames;
+  const showTitleInContent = false;
   const contentTimeline = (() => {
     const timeline: Array<{
       src: string;
@@ -261,6 +258,38 @@ export const Main = ({
       ? contentTimeline[contentTimeline.length - 1].start +
         contentTimeline[contentTimeline.length - 1].durationInFrames
       : Math.max(0, durationInFrames - contentStart);
+  const coverExtraDuration = Math.max(0, coverDisplayDuration - coverDuration);
+  const coverContentTransition =
+    resolvedTransitionEffect === "fade" && coverDisplayDuration > 0 && contentDuration > 0
+      ? Math.min(
+          Math.floor(fps * 0.5),
+          Math.floor(Math.min(coverDisplayDuration, contentDuration) / 2),
+        )
+      : 0;
+  const coverOpacity =
+    coverContentTransition > 0
+      ? interpolate(
+          frame,
+          [coverDisplayDuration - coverContentTransition, coverDisplayDuration],
+          [1, 0],
+          {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          },
+        )
+      : 1;
+  const contentOpacity =
+    coverContentTransition > 0
+      ? interpolate(
+          frame,
+          [coverDisplayDuration - coverContentTransition, coverDisplayDuration],
+          [0, 1],
+          {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          },
+        )
+      : 1;
   const audioTimeline = buildTimeline(
     resolvedAudioSequence.length > 0
       ? resolvedAudioSequence
@@ -269,24 +298,60 @@ export const Main = ({
         : [],
     fallbackItemDuration,
   );
-  const resolveTimelineSrc = (
-    timeline: Array<{ src: string; start: number; durationInFrames: number }>,
+  const getOpacity = (
+    relativeFrame: number,
+    durationInFrames: number,
+    fadeDuration: number,
+    fadeIn: boolean,
+    fadeOut: boolean,
   ) => {
-    for (const item of timeline) {
-      if (frame >= item.start && frame < item.start + item.durationInFrames) {
-        return item.src;
-      }
+    if (!fadeIn && !fadeOut) {
+      return 1;
     }
-    return timeline.length > 0 ? timeline[timeline.length - 1].src : undefined;
+    const safeFadeDuration =
+      fadeDuration > 0 && durationInFrames - fadeDuration > fadeDuration
+        ? fadeDuration
+        : 0;
+    if (safeFadeDuration === 0) {
+      return 1;
+    }
+    if (fadeIn && fadeOut) {
+      return interpolate(
+        relativeFrame,
+        [
+          0,
+          safeFadeDuration,
+          durationInFrames - safeFadeDuration,
+          durationInFrames,
+        ],
+        [0, 1, 1, 0],
+        {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        },
+      );
+    }
+    if (fadeIn) {
+      return interpolate(
+        relativeFrame,
+        [0, safeFadeDuration],
+        [0, 1],
+        {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        },
+      );
+    }
+    return interpolate(
+      relativeFrame,
+      [durationInFrames - safeFadeDuration, durationInFrames],
+      [1, 0],
+      {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      },
+    );
   };
-  const resolvedCoverImage =
-    coverContentType === "image" ? resolveTimelineSrc(coverTimeline) : undefined;
-  const resolvedCoverVideo =
-    coverContentType === "video" ? resolveTimelineSrc(coverTimeline) : undefined;
-  const shouldShowCoverVideo =
-    coverContentType === "video" && Boolean(resolvedCoverVideo);
-  const shouldShowCoverImage =
-    coverContentType === "image" && Boolean(resolvedCoverImage);
   const perSubtitleDuration =
     resolvedSubtitles.length > 0
       ? Math.max(1, Math.floor(contentDuration / resolvedSubtitles.length))
@@ -301,26 +366,58 @@ export const Main = ({
     >
       {coverDisplayDuration > 0 ? (
         <Sequence durationInFrames={coverDisplayDuration}>
-          <AbsoluteFill>
-            {shouldShowCoverVideo && resolvedCoverVideo ? (
-              <Video
-                src={resolvedCoverVideo}
-                className="absolute inset-0 w-full h-full"
-                style={{
-                  objectFit: resolvedFit,
-                  objectPosition: resolvedPosition,
-                }}
-              />
-            ) : shouldShowCoverImage && resolvedCoverImage ? (
-              <Img
-                src={resolvedCoverImage}
-                alt="封面素材"
-                className="absolute inset-0 w-full h-full"
-                style={{
-                  objectFit: resolvedFit,
-                  objectPosition: resolvedPosition,
-                }}
-              />
+          <AbsoluteFill style={{ opacity: coverOpacity }}>
+            {coverTimeline.length > 0 ? (
+              coverTimeline.map((item, index) => {
+                const isLast = index === coverTimeline.length - 1;
+                const durationInFrames =
+                  item.durationInFrames + (isLast ? coverExtraDuration : 0);
+                const relativeFrame = frame - item.start;
+                const fadeDuration =
+                  resolvedTransitionEffect === "fade" && coverTimeline.length > 1
+                    ? Math.min(
+                        Math.floor(fps * 0.5),
+                        Math.floor(durationInFrames / 2),
+                      )
+                    : 0;
+                const opacity = getOpacity(
+                  relativeFrame,
+                  durationInFrames,
+                  fadeDuration,
+                  fadeDuration > 0,
+                  fadeDuration > 0,
+                );
+                return (
+                  <Sequence
+                    key={`cover-${item.src}-${index}`}
+                    from={item.start}
+                    durationInFrames={durationInFrames}
+                  >
+                    {coverContentType === "video" ? (
+                      <Video
+                        src={item.src}
+                        className="absolute inset-0 w-full h-full"
+                        style={{
+                          objectFit: resolvedFit,
+                          objectPosition: resolvedPosition,
+                          opacity,
+                        }}
+                      />
+                    ) : (
+                      <Img
+                        src={item.src}
+                        alt="封面素材"
+                        className="absolute inset-0 w-full h-full"
+                        style={{
+                          objectFit: resolvedFit,
+                          objectPosition: resolvedPosition,
+                          opacity,
+                        }}
+                      />
+                    )}
+                  </Sequence>
+                );
+              })
             ) : null}
           </AbsoluteFill>
         </Sequence>
@@ -334,8 +431,9 @@ export const Main = ({
         </Sequence>
       ) : null}
       <Sequence from={contentStart}>
-        <TextFade>
-          {layout === "left" ? (
+        <AbsoluteFill style={{ opacity: contentOpacity }}>
+          <TextFade centered={layout !== "full-screen"} enableMask={layout !== "full-screen"}>
+            {layout === "left" ? (
             <div className="flex items-center justify-between gap-12 px-24">
               <div className="flex flex-col gap-6 max-w-[520px]">
                 {badgeText ? (
@@ -468,7 +566,7 @@ export const Main = ({
                 </div>
               ) : null}
             </div>
-          ) : layout === "image-top" ? (
+            ) : layout === "image-top" ? (
             <div className="flex flex-col items-center gap-6">
               {contentTimeline.length > 0 ? (
                 <div className="relative w-[520px] h-[300px] rounded-2xl shadow-lg overflow-hidden">
@@ -599,7 +697,7 @@ export const Main = ({
                 />
               ) : null}
             </div>
-          ) : layout === "full-screen" ? (
+            ) : layout === "full-screen" ? (
             <div className="relative w-full h-full">
               {contentTimeline.length > 0 ? (
                 <div className="absolute inset-0">
@@ -689,54 +787,56 @@ export const Main = ({
                 </div>
               ) : null}
               {showTitleInContent && (hasTitle || hasSubtitle) ? (
-                <AbsoluteFill className="items-center justify-center">
-                  <div className="flex flex-col items-center gap-4 px-12">
-                    {badgeText ? (
-                      <span
-                        className="text-sm font-semibold px-3 py-1 rounded-full w-fit"
-                        style={{
-                          backgroundColor: accentColor ?? "#2563eb",
-                          color: "#ffffff",
-                        }}
-                      >
-                        {badgeText}
-                      </span>
-                    ) : null}
-                    {logoImageDataUrl ? (
-                      <Img
-                        src={logoImageDataUrl}
-                        alt="作品徽标"
-                        className="w-[120px] h-[120px] object-contain"
-                      />
-                    ) : null}
-                    {hasTitle ? (
-                      <h1
-                        className="font-bold text-center"
-                        style={{
-                          fontFamily,
-                          color: textColor ?? "#ffffff",
-                          fontSize: `${resolvedTitleSize}px`,
-                        }}
-                      >
-                        {resolvedTitle}
-                      </h1>
-                    ) : null}
-                    {hasSubtitle ? (
-                      <p
-                        className="text-center"
-                        style={{
-                          color: textColor ?? "#ffffff",
-                          fontSize: `${resolvedSubtitleSize}px`,
-                        }}
-                      >
-                        {resolvedSubtitle}
-                      </p>
-                    ) : null}
-                  </div>
-                </AbsoluteFill>
+                <TextFade centered={false} enableMask>
+                  <AbsoluteFill className="items-center justify-center">
+                    <div className="flex flex-col items-center gap-4 px-12">
+                      {badgeText ? (
+                        <span
+                          className="text-sm font-semibold px-3 py-1 rounded-full w-fit"
+                          style={{
+                            backgroundColor: accentColor ?? "#2563eb",
+                            color: "#ffffff",
+                          }}
+                        >
+                          {badgeText}
+                        </span>
+                      ) : null}
+                      {logoImageDataUrl ? (
+                        <Img
+                          src={logoImageDataUrl}
+                          alt="作品徽标"
+                          className="w-[120px] h-[120px] object-contain"
+                        />
+                      ) : null}
+                      {hasTitle ? (
+                        <h1
+                          className="font-bold text-center"
+                          style={{
+                            fontFamily,
+                            color: textColor ?? "#ffffff",
+                            fontSize: `${resolvedTitleSize}px`,
+                          }}
+                        >
+                          {resolvedTitle}
+                        </h1>
+                      ) : null}
+                      {hasSubtitle ? (
+                        <p
+                          className="text-center"
+                          style={{
+                            color: textColor ?? "#ffffff",
+                            fontSize: `${resolvedSubtitleSize}px`,
+                          }}
+                        >
+                          {resolvedSubtitle}
+                        </p>
+                      ) : null}
+                    </div>
+                  </AbsoluteFill>
+                </TextFade>
               ) : null}
             </div>
-          ) : (
+            ) : (
             <div className="flex flex-col items-center gap-6">
               {badgeText ? (
                 <span
@@ -867,8 +967,9 @@ export const Main = ({
                 </div>
               ) : null}
             </div>
-          )}
-        </TextFade>
+            )}
+          </TextFade>
+        </AbsoluteFill>
       </Sequence>
       {showTitleInCover && (hasTitle || hasSubtitle) ? (
         <Sequence durationInFrames={resolvedTitleDisplayFrames}>
