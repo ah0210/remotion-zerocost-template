@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -145,7 +145,7 @@ const loadMediaBlob = async (mediaId: string): Promise<Blob | undefined> => {
   return blob;
 };
 
-const NewWorkPage = () => {
+const NewWorkContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const workId = searchParams.get("workId");
@@ -2576,6 +2576,20 @@ const NewWorkPage = () => {
         ) : null}
       </div>
     </div>
+  );
+};
+
+const NewWorkPage = () => {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-screen-md m-auto mb-12 mt-16 font-geist px-4 text-sm text-subtitle">
+          页面加载中...
+        </div>
+      }
+    >
+      <NewWorkContent />
+    </Suspense>
   );
 };
 

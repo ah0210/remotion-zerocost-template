@@ -2,7 +2,7 @@
 
 import { Player } from "@remotion/player";
 import type { NextPage } from "next";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { z } from "zod";
@@ -114,7 +114,7 @@ const loadMediaBlob = async (mediaId: string): Promise<Blob | undefined> => {
   return blob;
 };
 
-const Home: NextPage = () => {
+const HomeContent: NextPage = () => {
   const searchParams = useSearchParams();
   const [text, setText] = useState<string>(defaultMyCompProps.title ?? "");
   const [subtitle, setSubtitle] = useState<string>(
@@ -1228,4 +1228,18 @@ const Home: NextPage = () => {
   );
 };
 
-export default Home;
+const HomePage = () => {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-screen-xl mx-auto mb-16 mt-10 font-geist px-4 text-sm text-subtitle">
+          页面加载中...
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
+  );
+};
+
+export default HomePage;

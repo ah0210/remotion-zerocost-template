@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: "export",
+  images: {
+    unoptimized: true,
+  },
   webpack: (config, { isServer }) => {
     // 解决 Remotion 平台特定依赖问题
     if (isServer) {

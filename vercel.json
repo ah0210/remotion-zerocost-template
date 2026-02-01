@@ -1,4 +1,5 @@
 {
-    "buildCommand": "node deploy.mjs && next build"
-  }
+  "buildCommand": "next build",
+  "outputDirectory": "out"
+}
   
