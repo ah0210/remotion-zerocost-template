@@ -99,57 +99,64 @@ export const useServerRendering = (
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
+            let data: {
+              stage: string;
+              progress?: number;
+              videoBase64?: string;
+              fileName?: string;
+              error?: string;
+            };
             try {
-              const data = JSON.parse(line.slice(6));
-              
-              switch (data.stage) {
-                case 'bundling':
-                  setState({
-                    status: 'bundling',
-                    progress: data.progress / 100,
-                  });
-                  break;
-                
-                case 'preparing':
-                  setState({ status: 'preparing' });
-                  break;
-                
-                case 'rendering':
-                  setState({
-                    status: 'rendering',
-                    progress: data.progress / 100,
-                  });
-                  break;
-                
-                case 'finalizing':
-                  setState({
-                    status: 'finalizing',
-                    progress: data.progress / 100,
-                  });
-                  break;
-                
-                case 'done':
-                  // 将base64转换为Blob
-                  const byteCharacters = atob(data.videoBase64);
-                  const byteNumbers = new Array(byteCharacters.length);
-                  for (let i = 0; i < byteCharacters.length; i++) {
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                  }
-                  const byteArray = new Uint8Array(byteNumbers);
-                  const videoBlob = new Blob([byteArray], { type: 'video/mp4' });
-                  
-                  setState({
-                    status: 'done',
-                    videoBlob,
-                    fileName: data.fileName ?? getSafeFileName(inputProps.title),
-                  });
-                  break;
-                
-                case 'error':
-                  throw new Error(data.error);
-              }
+              data = JSON.parse(line.slice(6)) as {
+                stage: string;
+                progress?: number;
+                videoBase64?: string;
+                fileName?: string;
+                error?: string;
+              };
             } catch (parseError) {
               console.warn('Failed to parse SSE data:', parseError);
+              continue;
+            }
+            switch (data.stage) {
+              case 'bundling':
+                setState({
+                  status: 'bundling',
+                  progress: (data.progress ?? 0) / 100,
+                });
+                break;
+              case 'preparing':
+                setState({ status: 'preparing' });
+                break;
+              case 'rendering':
+                setState({
+                  status: 'rendering',
+                  progress: (data.progress ?? 0) / 100,
+                });
+                break;
+              case 'finalizing':
+                setState({
+                  status: 'finalizing',
+                  progress: (data.progress ?? 0) / 100,
+                });
+                break;
+              case 'done': {
+                const byteCharacters = atob(data.videoBase64 ?? '');
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                  byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const videoBlob = new Blob([byteArray], { type: 'video/mp4' });
+                setState({
+                  status: 'done',
+                  videoBlob,
+                  fileName: data.fileName ?? getSafeFileName(inputProps.title),
+                });
+                break;
+              }
+              case 'error':
+                throw new Error(data.error ?? 'Unknown render error');
             }
           }
         }

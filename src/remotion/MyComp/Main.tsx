@@ -796,14 +796,19 @@ export const Main = ({
                             Math.floor(item.durationInFrames / 2),
                           )
                         : 0;
+                    const safeFadeDuration =
+                      fadeDuration > 0 &&
+                      item.durationInFrames - fadeDuration > fadeDuration
+                        ? fadeDuration
+                        : 0;
                     const opacity =
-                      fadeDuration > 0
+                      safeFadeDuration > 0
                         ? interpolate(
                             relativeFrame,
                             [
                               0,
-                              fadeDuration,
-                              item.durationInFrames - fadeDuration,
+                              safeFadeDuration,
+                              item.durationInFrames - safeFadeDuration,
                               item.durationInFrames,
                             ],
                             [0, 1, 1, 0],

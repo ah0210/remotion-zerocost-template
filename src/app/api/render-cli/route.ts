@@ -1,11 +1,14 @@
 import { NextRequest } from 'next/server';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { createServer } from 'http';
-import { writeFile, readFile, unlink } from 'fs/promises';
+import { access, readFile, readdir, stat, unlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { basename, dirname, extname, join } from 'path';
 import { z } from 'zod';
+
+export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 const renderRequestSchema = z.object({
   compositionId: z.string(),
@@ -127,6 +130,175 @@ const safeUnlink = async (filePath?: string) => {
   }
 };
 
+const waitForFile = async (filePath: string, timeoutMs: number) => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await access(filePath);
+      return true;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+  return false;
+};
+
+const videoExtensions = ['.mp4', '.webm', '.mov', '.mkv'];
+
+const extractOutputFileFromLogs = (stdoutTail: string, stderrTail: string) => {
+  const combined = `${stdoutTail}\n${stderrTail}`;
+  const candidates: string[] = [];
+  const extensionPattern = '(mp4|webm|mov|mkv)';
+  const patterns = [
+    new RegExp(`"([A-Za-z]:\\\\[^"]+?\\.${extensionPattern})"`, 'gi'),
+    new RegExp(`"([A-Za-z]:\\/[^"]+?\\.${extensionPattern})"`, 'gi'),
+    new RegExp(`([A-Za-z]:\\\\[^\\s]+\\.${extensionPattern})`, 'gi'),
+    new RegExp(`([A-Za-z]:\\/[^\\s]+\\.${extensionPattern})`, 'gi'),
+  ];
+  for (const pattern of patterns) {
+    let match = pattern.exec(combined);
+    while (match) {
+      const value = match[1];
+      if (value) {
+        candidates.push(value);
+      }
+      match = pattern.exec(combined);
+    }
+  }
+  if (candidates.length === 0) {
+    return undefined;
+  }
+  return candidates[candidates.length - 1];
+};
+
+const findLatestVideoFile = async (
+  rootDir: string,
+  renderStart: number,
+  maxDepth: number,
+) => {
+  const queue: Array<{ dir: string; depth: number }> = [
+    { dir: rootDir, depth: 0 },
+  ];
+  let latestPath: string | undefined;
+  let latestTime = 0;
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) {
+      break;
+    }
+    const entries = await readdir(current.dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = join(current.dir, entry.name);
+      if (entry.isDirectory()) {
+        if (current.depth < maxDepth) {
+          queue.push({ dir: entryPath, depth: current.depth + 1 });
+        }
+        continue;
+      }
+      if (
+        videoExtensions.some((ext) => entry.name.toLowerCase().endsWith(ext))
+      ) {
+        const entryStat = await stat(entryPath);
+        if (entryStat.mtimeMs >= renderStart - 1000 && entryStat.mtimeMs > latestTime) {
+          latestTime = entryStat.mtimeMs;
+          latestPath = entryPath;
+        }
+      }
+    }
+  }
+  return latestPath;
+};
+
+const resolveOutputFile = async (
+  outputFile: string,
+  tmpDir: string,
+  renderStart: number,
+) => {
+  const outputExt = extname(outputFile).toLowerCase();
+  const outputBase = basename(outputFile, outputExt);
+  const outputDir = dirname(outputFile);
+  const primaryReady = await waitForFile(outputFile, 120000);
+  if (primaryReady) {
+    return outputFile;
+  }
+  for (const ext of videoExtensions) {
+    if (ext === outputExt) {
+      continue;
+    }
+    const alternate = join(outputDir, `${outputBase}${ext}`);
+    const alternateReady = await waitForFile(alternate, 2000);
+    if (alternateReady) {
+      return alternate;
+    }
+  }
+  const fallbackFile = join(process.cwd(), basename(outputFile));
+  const fallbackReady = await waitForFile(fallbackFile, 5000);
+  if (fallbackReady) {
+    return fallbackFile;
+  }
+  for (const ext of videoExtensions) {
+    const fallbackAlternate = join(process.cwd(), `${outputBase}${ext}`);
+    const fallbackAlternateReady = await waitForFile(fallbackAlternate, 2000);
+    if (fallbackAlternateReady) {
+      return fallbackAlternate;
+    }
+  }
+  const outputPrefix = outputBase;
+  try {
+    const entries = await readdir(tmpDir);
+    const candidates = entries.filter((name) =>
+      videoExtensions.some((ext) => name.toLowerCase().endsWith(ext)),
+    );
+    if (candidates.length === 0) {
+      return undefined;
+    }
+    let latest = candidates[0];
+    let latestTime = 0;
+    for (const candidate of candidates) {
+      const candidatePath = join(tmpDir, candidate);
+      const candidateStat = await stat(candidatePath);
+      const candidateBase = basename(candidate, extname(candidate));
+      if (
+        candidateStat.mtimeMs > latestTime &&
+        candidateStat.mtimeMs >= renderStart - 1000 &&
+        (candidateBase.startsWith(outputPrefix) || latestTime === 0)
+      ) {
+        latestTime = candidateStat.mtimeMs;
+        latest = candidate;
+      }
+    }
+    if (latestTime >= renderStart - 1000) {
+      return join(tmpDir, latest);
+    }
+    const prefixCandidates = candidates.filter((name) =>
+      basename(name, extname(name)).startsWith(outputPrefix),
+    );
+    if (prefixCandidates.length === 0) {
+      return undefined;
+    }
+    let fallbackLatest = prefixCandidates[0];
+    let fallbackLatestTime = 0;
+    for (const candidate of prefixCandidates) {
+      const candidatePath = join(tmpDir, candidate);
+      const candidateStat = await stat(candidatePath);
+      if (candidateStat.mtimeMs > fallbackLatestTime) {
+        fallbackLatestTime = candidateStat.mtimeMs;
+        fallbackLatest = candidate;
+      }
+    }
+    if (fallbackLatestTime > 0) {
+      return join(tmpDir, fallbackLatest);
+    }
+    const recursiveMatch = await findLatestVideoFile(tmpDir, renderStart, 2);
+    if (recursiveMatch) {
+      return recursiveMatch;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const startFileServer = async (
   fileMap: Map<string, { path: string; mime: string }>,
 ) => {
@@ -183,6 +355,7 @@ export async function POST(request: NextRequest) {
         const tempFiles: string[] = [];
         let localServer: ReturnType<typeof createServer> | undefined;
         let localBaseUrl = '';
+        let abortHandler: (() => void) | undefined;
         
         const sendProgress = (data: {
           stage: 'preparing' | 'bundling' | 'rendering' | 'finalizing' | 'done' | 'error';
@@ -268,31 +441,73 @@ export async function POST(request: NextRequest) {
           sendProgress({ stage: 'rendering', progress: 0 });
           
           const browserExecutable = resolveBrowserExecutable();
-          const browserExecutableArg = browserExecutable
-            ? ` --browser-executable="${browserExecutable}" --chrome-mode=chrome-for-testing`
-            : '';
           const durationArg =
             typeof nextInputProps.durationInFrames === 'number' &&
             nextInputProps.durationInFrames > 0
               ? ` --duration-in-frames=${Math.floor(nextInputProps.durationInFrames)}`
               : '';
-          const command = `npx remotion render ${compositionId} "${outputFile}" --props="${propsFile}"${browserExecutableArg}${durationArg} --log=verbose`;
-          
-          console.log('Executing command:', command);
-          
+          const buildRenderArgs = (): string[] => {
+            if (!propsFile || !outputFile) {
+              throw new Error('Props file or output file is missing.');
+            }
+            const entryFile = join(process.cwd(), 'src', 'remotion', 'index.ts');
+            if (!existsSync(entryFile)) {
+              throw new Error('Remotion entry file is missing.');
+            }
+            const cliEntryFile = entryFile.replace(/\\/g, '/');
+            const cliPropsFile = propsFile.replace(/\\/g, '/');
+            const cliOutputFile = outputFile.replace(/\\/g, '/');
+            const args = [
+              'remotion',
+              'render',
+              cliEntryFile,
+              compositionId,
+              cliOutputFile,
+              `--props=${cliPropsFile}`,
+              '--log=verbose',
+            ];
+            if (browserExecutable) {
+              args.push(
+                `--browser-executable=${browserExecutable.replace(/\\/g, '/')}`,
+              );
+            } else {
+              args.push('--chrome-mode=chrome-for-testing');
+            }
+            if (durationArg) {
+              args.push(durationArg.trim());
+            }
+            return args;
+          };
+
+          const renderArgs = buildRenderArgs();
+          console.log(
+            'Executing command:',
+            `node ${renderArgs.join(' ')}`.replace('node remotion', 'npx remotion'),
+          );
+
           // 执行命令并捕获进度
-          const childProcess = exec(command, { 
+          const renderStart = Date.now();
+          const childProcess = spawn('node', [
+            './node_modules/@remotion/cli/dist/index.js',
+            ...renderArgs.slice(1),
+          ], {
             cwd: process.cwd(),
-            maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+            windowsHide: true,
+            stdio: ['ignore', 'pipe', 'pipe'],
           });
 
           let lastProgress = 0;
           let stderrTail = '';
+          let stdoutTail = '';
           
           // 监听stdout以获取进度信息
           childProcess.stdout?.on('data', (data: Buffer) => {
             const output = data.toString();
             console.log('Remotion output:', output);
+            stdoutTail = `${stdoutTail}${output}`;
+            if (stdoutTail.length > 8000) {
+              stdoutTail = stdoutTail.slice(-8000);
+            }
             
             // 尝试解析进度信息
             const progressMatch = output.match(/(\d+)%/);
@@ -314,9 +529,16 @@ export async function POST(request: NextRequest) {
             }
           });
 
+          abortHandler = () => {
+            if (!childProcess.killed) {
+              childProcess.kill();
+            }
+          };
+          request.signal?.addEventListener('abort', abortHandler);
+
           // 等待命令完成
           await new Promise<void>((resolve, reject) => {
-            childProcess.on('error', (error) => {
+            childProcess.on('error', (error: Error) => {
               reject(
                 new Error(
                   `Remotion command failed to start: ${error.message}${
@@ -345,11 +567,29 @@ export async function POST(request: NextRequest) {
               },
             );
           });
+          request.signal?.removeEventListener('abort', abortHandler);
 
-          // 3. 读取生成的视频文件
           sendProgress({ stage: 'finalizing', progress: 0 });
-          
-          const videoBuffer = await readFile(outputFile);
+
+          const logOutputFile = extractOutputFileFromLogs(stdoutTail, stderrTail);
+          let resolvedOutputFile: string | undefined;
+          if (logOutputFile) {
+            const logReady = await waitForFile(logOutputFile, 5000);
+            if (logReady) {
+              resolvedOutputFile = logOutputFile;
+            }
+          }
+          if (!resolvedOutputFile) {
+            resolvedOutputFile = await resolveOutputFile(outputFile, tmpDir, renderStart);
+          }
+          if (!resolvedOutputFile) {
+            throw new Error(
+              `Render completed without output file.${
+                stderrTail ? `\n${stderrTail}` : ''
+              }${stdoutTail ? `\n${stdoutTail}` : ''}`,
+            );
+          }
+          const videoBuffer = await readFile(resolvedOutputFile);
           const videoBase64 = videoBuffer.toString('base64');
 
           // 5. 发送最终结果
@@ -375,6 +615,9 @@ export async function POST(request: NextRequest) {
           });
           controller.close();
         } finally {
+          if (abortHandler) {
+            request.signal?.removeEventListener('abort', abortHandler);
+          }
           if (localServer) {
             await new Promise<void>((resolve) => {
               localServer?.close(() => resolve());
