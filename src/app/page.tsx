@@ -114,22 +114,6 @@ const loadMediaBlob = async (mediaId: string): Promise<Blob | undefined> => {
   return blob;
 };
 
-const blobToDataUrl = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("读取素材失败"));
-      }
-    };
-    reader.onerror = () =>
-      reject(reader.error ?? new Error("读取素材失败"));
-    reader.readAsDataURL(blob);
-  });
-};
-
 const Home: NextPage = () => {
   const searchParams = useSearchParams();
   const [text, setText] = useState<string>(defaultMyCompProps.title ?? "");
@@ -204,26 +188,6 @@ const Home: NextPage = () => {
   );
   const [audioObjectUrls, setAudioObjectUrls] = useState<string[]>([]);
   const [imageObjectUrls, setImageObjectUrls] = useState<string[]>([]);
-  const [coverImageServerDataUrl, setCoverImageServerDataUrl] = useState<
-    string | undefined
-  >(undefined);
-  const [coverVideoServerDataUrl, setCoverVideoServerDataUrl] = useState<
-    string | undefined
-  >(undefined);
-  const [logoImageServerDataUrl, setLogoImageServerDataUrl] = useState<
-    string | undefined
-  >(undefined);
-  const [audioServerDataUrl, setAudioServerDataUrl] = useState<
-    string | undefined
-  >(undefined);
-  const [coverImageServerDataUrls, setCoverImageServerDataUrls] = useState<
-    string[]
-  >([]);
-  const [coverVideoServerDataUrls, setCoverVideoServerDataUrls] = useState<
-    string[]
-  >([]);
-  const [audioServerDataUrls, setAudioServerDataUrls] = useState<string[]>([]);
-  const [imageServerDataUrls, setImageServerDataUrls] = useState<string[]>([]);
   const [textColor, setTextColor] = useState<string | undefined>(
     defaultMyCompProps.textColor,
   );
@@ -276,7 +240,6 @@ const Home: NextPage = () => {
   );
   const [works, setWorks] = useState<WorkItem[]>([]);
   const [selectedWorkId, setSelectedWorkId] = useState<string>("builtin");
-  const [appliedWorkId, setAppliedWorkId] = useState<string>("builtin");
   const imageMediaIds = useMemo(() => {
     return imageSequenceItems
       .filter((item) => item.type === "upload" && item.mediaId)
@@ -396,7 +359,6 @@ const Home: NextPage = () => {
       setSubtitles(defaultMyCompProps.subtitles ?? []);
       setImageEffect(defaultMyCompProps.imageEffect ?? "none");
       setTransitionEffect(defaultMyCompProps.transitionEffect ?? "fade");
-      setAppliedWorkId("builtin");
       return;
     }
     const selected = availableWorks.find((work) => work.id === selectedWorkId);
@@ -562,7 +524,6 @@ const Home: NextPage = () => {
       setSubtitles(selected.subtitles ?? []);
       setImageEffect(selected.imageEffect ?? "none");
       setTransitionEffect(selected.transitionEffect ?? "fade");
-      setAppliedWorkId(selectedWorkId);
     }
   }, [availableWorks, selectedWorkId]);
 
@@ -572,7 +533,6 @@ const Home: NextPage = () => {
     const run = async () => {
       if (!coverImageMediaId) {
         setCoverImageObjectUrl(undefined);
-        setCoverImageServerDataUrl(undefined);
         return;
       }
       try {
@@ -582,7 +542,6 @@ const Home: NextPage = () => {
         }
         if (!blob) {
           setCoverImageObjectUrl(undefined);
-          setCoverImageServerDataUrl(undefined);
           return;
         }
         objectUrl = URL.createObjectURL(blob);
@@ -592,14 +551,9 @@ const Home: NextPage = () => {
           }
           return objectUrl;
         });
-        const dataUrl = await blobToDataUrl(blob);
-        if (active) {
-          setCoverImageServerDataUrl(dataUrl);
-        }
       } catch {
         if (active) {
           setCoverImageObjectUrl(undefined);
-          setCoverImageServerDataUrl(undefined);
         }
       }
     };
@@ -618,7 +572,6 @@ const Home: NextPage = () => {
     const run = async () => {
       if (!coverVideoMediaId) {
         setCoverVideoObjectUrl(undefined);
-        setCoverVideoServerDataUrl(undefined);
         return;
       }
       try {
@@ -628,7 +581,6 @@ const Home: NextPage = () => {
         }
         if (!blob) {
           setCoverVideoObjectUrl(undefined);
-          setCoverVideoServerDataUrl(undefined);
           return;
         }
         objectUrl = URL.createObjectURL(blob);
@@ -638,14 +590,9 @@ const Home: NextPage = () => {
           }
           return objectUrl;
         });
-        const dataUrl = await blobToDataUrl(blob);
-        if (active) {
-          setCoverVideoServerDataUrl(dataUrl);
-        }
       } catch {
         if (active) {
           setCoverVideoObjectUrl(undefined);
-          setCoverVideoServerDataUrl(undefined);
         }
       }
     };
@@ -664,7 +611,6 @@ const Home: NextPage = () => {
     const run = async () => {
       if (!logoImageMediaId) {
         setLogoImageObjectUrl(undefined);
-        setLogoImageServerDataUrl(undefined);
         return;
       }
       try {
@@ -674,7 +620,6 @@ const Home: NextPage = () => {
         }
         if (!blob) {
           setLogoImageObjectUrl(undefined);
-          setLogoImageServerDataUrl(undefined);
           return;
         }
         objectUrl = URL.createObjectURL(blob);
@@ -684,14 +629,9 @@ const Home: NextPage = () => {
           }
           return objectUrl;
         });
-        const dataUrl = await blobToDataUrl(blob);
-        if (active) {
-          setLogoImageServerDataUrl(dataUrl);
-        }
       } catch {
         if (active) {
           setLogoImageObjectUrl(undefined);
-          setLogoImageServerDataUrl(undefined);
         }
       }
     };
@@ -710,7 +650,6 @@ const Home: NextPage = () => {
     const run = async () => {
       if (!audioMediaId) {
         setAudioObjectUrl(undefined);
-        setAudioServerDataUrl(undefined);
         return;
       }
       try {
@@ -720,7 +659,6 @@ const Home: NextPage = () => {
         }
         if (!blob) {
           setAudioObjectUrl(undefined);
-          setAudioServerDataUrl(undefined);
           return;
         }
         objectUrl = URL.createObjectURL(blob);
@@ -730,14 +668,9 @@ const Home: NextPage = () => {
           }
           return objectUrl;
         });
-        const dataUrl = await blobToDataUrl(blob);
-        if (active) {
-          setAudioServerDataUrl(dataUrl);
-        }
       } catch {
         if (active) {
           setAudioObjectUrl(undefined);
-          setAudioServerDataUrl(undefined);
         }
       }
     };
@@ -756,12 +689,10 @@ const Home: NextPage = () => {
     const run = async () => {
       if (coverImageMediaIds.length === 0) {
         setCoverImageObjectUrls([]);
-        setCoverImageServerDataUrls([]);
         return;
       }
       try {
         const nextObjectUrls: string[] = [];
-        const nextServerUrls: string[] = [];
         for (const mediaId of coverImageMediaIds) {
           const blob = await loadMediaBlob(mediaId);
           if (!active) {
@@ -773,17 +704,13 @@ const Home: NextPage = () => {
           const objectUrl = URL.createObjectURL(blob);
           objectUrls.push(objectUrl);
           nextObjectUrls.push(objectUrl);
-          const dataUrl = await blobToDataUrl(blob);
-          nextServerUrls.push(dataUrl);
         }
         if (active) {
           setCoverImageObjectUrls(nextObjectUrls);
-          setCoverImageServerDataUrls(nextServerUrls);
         }
       } catch {
         if (active) {
           setCoverImageObjectUrls([]);
-          setCoverImageServerDataUrls([]);
         }
       }
     };
@@ -800,12 +727,10 @@ const Home: NextPage = () => {
     const run = async () => {
       if (coverVideoMediaIds.length === 0) {
         setCoverVideoObjectUrls([]);
-        setCoverVideoServerDataUrls([]);
         return;
       }
       try {
         const nextObjectUrls: string[] = [];
-        const nextServerUrls: string[] = [];
         for (const mediaId of coverVideoMediaIds) {
           const blob = await loadMediaBlob(mediaId);
           if (!active) {
@@ -817,17 +742,13 @@ const Home: NextPage = () => {
           const objectUrl = URL.createObjectURL(blob);
           objectUrls.push(objectUrl);
           nextObjectUrls.push(objectUrl);
-          const dataUrl = await blobToDataUrl(blob);
-          nextServerUrls.push(dataUrl);
         }
         if (active) {
           setCoverVideoObjectUrls(nextObjectUrls);
-          setCoverVideoServerDataUrls(nextServerUrls);
         }
       } catch {
         if (active) {
           setCoverVideoObjectUrls([]);
-          setCoverVideoServerDataUrls([]);
         }
       }
     };
@@ -844,12 +765,10 @@ const Home: NextPage = () => {
     const run = async () => {
       if (audioMediaIds.length === 0) {
         setAudioObjectUrls([]);
-        setAudioServerDataUrls([]);
         return;
       }
       try {
         const nextObjectUrls: string[] = [];
-        const nextServerUrls: string[] = [];
         for (const mediaId of audioMediaIds) {
           const blob = await loadMediaBlob(mediaId);
           if (!active) {
@@ -861,17 +780,13 @@ const Home: NextPage = () => {
           const objectUrl = URL.createObjectURL(blob);
           objectUrls.push(objectUrl);
           nextObjectUrls.push(objectUrl);
-          const dataUrl = await blobToDataUrl(blob);
-          nextServerUrls.push(dataUrl);
         }
         if (active) {
           setAudioObjectUrls(nextObjectUrls);
-          setAudioServerDataUrls(nextServerUrls);
         }
       } catch {
         if (active) {
           setAudioObjectUrls([]);
-          setAudioServerDataUrls([]);
         }
       }
     };
@@ -888,12 +803,10 @@ const Home: NextPage = () => {
     const run = async () => {
       if (imageMediaIds.length === 0) {
         setImageObjectUrls([]);
-        setImageServerDataUrls([]);
         return;
       }
       try {
         const nextObjectUrls: string[] = [];
-        const nextServerUrls: string[] = [];
         for (const mediaId of imageMediaIds) {
           const blob = await loadMediaBlob(mediaId);
           if (!active) {
@@ -905,17 +818,13 @@ const Home: NextPage = () => {
           const objectUrl = URL.createObjectURL(blob);
           objectUrls.push(objectUrl);
           nextObjectUrls.push(objectUrl);
-          const dataUrl = await blobToDataUrl(blob);
-          nextServerUrls.push(dataUrl);
         }
         if (active) {
           setImageObjectUrls(nextObjectUrls);
-          setImageServerDataUrls(nextServerUrls);
         }
       } catch {
         if (active) {
           setImageObjectUrls([]);
-          setImageServerDataUrls([]);
         }
       }
     };
@@ -935,16 +844,6 @@ const Home: NextPage = () => {
     });
     return map;
   }, [imageMediaIds, imageObjectUrls]);
-  const imageServerDataUrlMap = useMemo(() => {
-    const map = new Map<string, string>();
-    imageMediaIds.forEach((mediaId, index) => {
-      const dataUrl = imageServerDataUrls[index];
-      if (dataUrl) {
-        map.set(mediaId, dataUrl);
-      }
-    });
-    return map;
-  }, [imageMediaIds, imageServerDataUrls]);
   const coverImageObjectUrlMap = useMemo(() => {
     const map = new Map<string, string>();
     coverImageMediaIds.forEach((mediaId, index) => {
@@ -975,36 +874,6 @@ const Home: NextPage = () => {
     });
     return map;
   }, [audioMediaIds, audioObjectUrls]);
-  const coverImageServerDataUrlMap = useMemo(() => {
-    const map = new Map<string, string>();
-    coverImageMediaIds.forEach((mediaId, index) => {
-      const dataUrl = coverImageServerDataUrls[index];
-      if (dataUrl) {
-        map.set(mediaId, dataUrl);
-      }
-    });
-    return map;
-  }, [coverImageMediaIds, coverImageServerDataUrls]);
-  const coverVideoServerDataUrlMap = useMemo(() => {
-    const map = new Map<string, string>();
-    coverVideoMediaIds.forEach((mediaId, index) => {
-      const dataUrl = coverVideoServerDataUrls[index];
-      if (dataUrl) {
-        map.set(mediaId, dataUrl);
-      }
-    });
-    return map;
-  }, [coverVideoMediaIds, coverVideoServerDataUrls]);
-  const audioServerDataUrlMap = useMemo(() => {
-    const map = new Map<string, string>();
-    audioMediaIds.forEach((mediaId, index) => {
-      const dataUrl = audioServerDataUrls[index];
-      if (dataUrl) {
-        map.set(mediaId, dataUrl);
-      }
-    });
-    return map;
-  }, [audioMediaIds, audioServerDataUrls]);
 
   const inputProps: z.infer<typeof CompositionProps> = useMemo(() => {
     const resolvedCoverImage =
@@ -1189,221 +1058,6 @@ const Home: NextPage = () => {
     durationInFrames,
   ]);
 
-  const serverInputProps: z.infer<typeof CompositionProps> = useMemo(() => {
-    const resolvedCoverImage =
-      coverImageUrl.trim().length > 0
-        ? coverImageUrl.trim()
-        : coverImageServerDataUrl ?? coverImageDataUrl;
-    const resolvedCoverVideo =
-      coverVideoUrl.trim().length > 0
-        ? coverVideoUrl.trim()
-        : coverVideoServerDataUrl ?? coverVideoDataUrl;
-    const resolvedLogoImage =
-      logoImageUrl.trim().length > 0
-        ? logoImageUrl.trim()
-        : logoImageServerDataUrl ?? logoImageDataUrl;
-    const resolvedAudio =
-      audioUrl.trim().length > 0
-        ? audioUrl.trim()
-        : audioServerDataUrl ?? audioDataUrl;
-    const resolvedCoverImageSequence = coverImageSequenceItems
-      .map((item) => {
-        const src =
-          item.type === "upload"
-            ? item.mediaId
-              ? coverImageServerDataUrlMap.get(item.mediaId)
-              : undefined
-            : item.url;
-        if (!src) {
-          return null;
-        }
-        return {
-          src,
-          durationInFrames: item.durationInFrames,
-        };
-      })
-      .filter(Boolean) as Array<{
-      src: string;
-      durationInFrames?: number;
-    }>;
-    const resolvedCoverVideoSequence = coverVideoSequenceItems
-      .map((item) => {
-        const src =
-          item.type === "upload"
-            ? item.mediaId
-              ? coverVideoServerDataUrlMap.get(item.mediaId)
-              : undefined
-            : item.url;
-        if (!src) {
-          return null;
-        }
-        return {
-          src,
-          durationInFrames: item.durationInFrames,
-        };
-      })
-      .filter(Boolean) as Array<{
-      src: string;
-      durationInFrames?: number;
-    }>;
-    const resolvedAudioSequence = audioSequenceItems
-      .map((item) => {
-        const src =
-          item.type === "upload"
-            ? item.mediaId
-              ? audioServerDataUrlMap.get(item.mediaId)
-              : undefined
-            : item.url;
-        if (!src) {
-          return null;
-        }
-        return {
-          src,
-          durationInFrames: item.durationInFrames,
-        };
-      })
-      .filter(Boolean) as Array<{
-      src: string;
-      durationInFrames?: number;
-    }>;
-    const resolvedImageSequence = imageSequenceItems
-      .map((item) => {
-        const src =
-          item.type === "upload"
-            ? item.mediaId
-              ? imageServerDataUrlMap.get(item.mediaId)
-              : undefined
-            : item.url;
-        if (!src) {
-          return null;
-        }
-        return {
-          src,
-          durationInFrames: item.durationInFrames,
-        };
-      })
-      .filter(Boolean) as Array<{
-      src: string;
-      durationInFrames?: number;
-    }>;
-    const resolvedImageArray = resolvedImageSequence.map((item) => item.src);
-    return {
-      title: text,
-      subtitle: subtitle || undefined,
-      badgeText: badgeText || undefined,
-      coverImageDataUrl: resolvedCoverImage,
-      coverVideoDataUrl: resolvedCoverVideo,
-      logoImageDataUrl: resolvedLogoImage,
-      coverImageSequence:
-        resolvedCoverImageSequence.length > 0
-          ? resolvedCoverImageSequence
-          : undefined,
-      coverVideoSequence:
-        resolvedCoverVideoSequence.length > 0
-          ? resolvedCoverVideoSequence
-          : undefined,
-      audioSequence:
-        resolvedAudioSequence.length > 0 ? resolvedAudioSequence : undefined,
-      imageArray:
-        resolvedImageSequence.length === 0 && resolvedImageArray.length > 0
-          ? resolvedImageArray
-          : undefined,
-      imageSequence:
-        resolvedImageSequence.length > 0 ? resolvedImageSequence : undefined,
-      imageEffect,
-      transitionEffect,
-      subtitles: subtitles.length > 0 ? subtitles : undefined,
-      audioDataUrl: resolvedAudio,
-      backgroundColor,
-      textColor,
-      accentColor,
-      titleFontSize,
-      subtitleFontSize,
-      titleDisplayFrames,
-      captionsFontSize,
-      captionsFontFamily,
-      durationInFrames,
-      coverMediaType,
-      mediaFit,
-      mediaPosition,
-      layout,
-      showRings,
-    };
-  }, [
-    accentColor,
-    audioDataUrl,
-    audioServerDataUrl,
-    audioSequenceItems,
-    audioServerDataUrlMap,
-    audioUrl,
-    backgroundColor,
-    badgeText,
-    coverImageDataUrl,
-    coverImageServerDataUrl,
-    coverImageSequenceItems,
-    coverImageServerDataUrlMap,
-    coverImageUrl,
-    coverVideoDataUrl,
-    coverVideoServerDataUrl,
-    coverVideoSequenceItems,
-    coverVideoServerDataUrlMap,
-    coverVideoUrl,
-    coverMediaType,
-    imageEffect,
-    imageSequenceItems,
-    imageServerDataUrlMap,
-    layout,
-    logoImageDataUrl,
-    logoImageServerDataUrl,
-    logoImageUrl,
-    mediaFit,
-    mediaPosition,
-    showRings,
-    subtitle,
-    subtitleFontSize,
-    subtitles,
-    text,
-    textColor,
-    titleFontSize,
-    titleDisplayFrames,
-    captionsFontSize,
-    captionsFontFamily,
-    transitionEffect,
-    durationInFrames,
-  ]);
-
-  const serverMediaReady = useMemo(() => {
-    const singleReady =
-      (!coverImageMediaId || !!coverImageServerDataUrl) &&
-      (!coverVideoMediaId || !!coverVideoServerDataUrl) &&
-      (!logoImageMediaId || !!logoImageServerDataUrl) &&
-      (!audioMediaId || !!audioServerDataUrl);
-    const listReady =
-      coverImageMediaIds.every((id) => coverImageServerDataUrlMap.has(id)) &&
-      coverVideoMediaIds.every((id) => coverVideoServerDataUrlMap.has(id)) &&
-      audioMediaIds.every((id) => audioServerDataUrlMap.has(id)) &&
-      imageMediaIds.every((id) => imageServerDataUrlMap.has(id));
-    return singleReady && listReady;
-  }, [
-    audioMediaId,
-    audioMediaIds,
-    audioServerDataUrl,
-    audioServerDataUrlMap,
-    coverImageMediaId,
-    coverImageMediaIds,
-    coverImageServerDataUrl,
-    coverImageServerDataUrlMap,
-    coverVideoMediaId,
-    coverVideoMediaIds,
-    coverVideoServerDataUrl,
-    coverVideoServerDataUrlMap,
-    imageMediaIds,
-    imageServerDataUrlMap,
-    logoImageMediaId,
-    logoImageServerDataUrl,
-  ]);
-  const serverSelectionReady = appliedWorkId === selectedWorkId;
-
   const handleDeleteWork = (id: string) => {
     const nextWorks = works.filter((work) => work.id !== id);
     persistWorks(nextWorks);
@@ -1515,10 +1169,6 @@ const Home: NextPage = () => {
           text={text}
           setText={setText}
           inputProps={inputProps}
-          serverInputProps={serverInputProps}
-          selectedWorkId={selectedWorkId}
-          serverMediaReady={serverMediaReady}
-          serverSelectionReady={serverSelectionReady}
           composition={{
             component: Main,
             id: COMP_NAME,
