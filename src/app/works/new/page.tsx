@@ -148,6 +148,8 @@ const loadMediaBlob = async (mediaId: string): Promise<Blob | undefined> => {
 const NewWorkPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const workId = searchParams.get("workId");
+  const templateId = searchParams.get("templateId");
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [badgeText, setBadgeText] = useState("");
@@ -234,6 +236,7 @@ const NewWorkPage = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [hasAppliedTemplate, setHasAppliedTemplate] = useState(false);
   const imageMediaIds = useMemo(() => {
     return imageSequenceItems
       .filter((item) => item.type === "upload" && item.mediaId)
@@ -344,6 +347,12 @@ const NewWorkPage = () => {
     ],
     [],
   );
+  const selectedTemplate = useMemo(() => {
+    if (!templateId) {
+      return undefined;
+    }
+    return templates.find((template) => template.id === templateId);
+  }, [templateId, templates]);
 
   const applyTemplate = (template: (typeof templates)[number]) => {
     setTitle(template.data.title);
@@ -393,7 +402,6 @@ const NewWorkPage = () => {
   };
 
   useEffect(() => {
-    const workId = searchParams.get("workId");
     if (!workId) {
       setEditingId(null);
       return;
@@ -566,7 +574,28 @@ const NewWorkPage = () => {
     setImageEffect(target.imageEffect ?? "none");
     setTransitionEffect(target.transitionEffect ?? "fade");
     setAddToRenderPage(target.addToRenderPage);
-  }, [searchParams]);
+  }, [workId]);
+
+  useEffect(() => {
+    setHasAppliedTemplate(false);
+  }, [templateId, workId]);
+
+  useEffect(() => {
+    if (workId) {
+      return;
+    }
+    if (!templateId || !selectedTemplate || hasAppliedTemplate) {
+      return;
+    }
+    applyTemplate(selectedTemplate);
+    setHasAppliedTemplate(true);
+  }, [
+    applyTemplate,
+    hasAppliedTemplate,
+    selectedTemplate,
+    templateId,
+    workId,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -1467,45 +1496,36 @@ const NewWorkPage = () => {
 
   return (
     <div className="max-w-screen-md m-auto mb-12 mt-16 font-geist px-4">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
         <div>
+          <div className="text-xs text-subtitle">步骤 2/2</div>
           <h1 className="text-2xl font-bold text-foreground">
-            {editingId ? "编辑 Remotion 作品" : "新增 Remotion 作品"}
+            {editingId ? "编辑 Remotion 作品" : "设置作品素材"}
           </h1>
           <p className="text-sm text-subtitle mt-2">
-            通过表单上传或填写素材，快速生成你的新作品。
+            完善素材与样式后即可保存你的作品。
           </p>
+          {selectedTemplate ? (
+            <div className="text-xs text-subtitle mt-1">
+              已选择模板：{selectedTemplate.name}
+            </div>
+          ) : null}
         </div>
-        <Link
-          href="/"
-          className="text-sm font-medium text-foreground border border-unfocused-border-color rounded-geist px-3 py-2 hover:border-focused-border-color"
-        >
-          返回渲染页面
-        </Link>
-      </div>
-      <div className="border border-unfocused-border-color rounded-geist bg-background p-geist mb-6 flex flex-col gap-4">
-        <div>
-          <h2 className="text-base font-bold text-foreground">模板一键套用</h2>
-          <p className="text-sm text-subtitle mt-1">
-            选择模板后可继续修改素材与样式
-          </p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-3">
-          {templates.map((template) => (
-            <button
-              key={template.id}
-              type="button"
-              className="text-left border border-unfocused-border-color rounded-geist p-3 hover:border-focused-border-color transition-colors"
-              onClick={() => applyTemplate(template)}
+        <div className="flex flex-wrap gap-2">
+          {!editingId ? (
+            <Link
+              href="/works/new/template-selection"
+              className="text-sm font-medium text-foreground border border-unfocused-border-color rounded-geist px-3 py-2 hover:border-focused-border-color"
             >
-              <div className="text-sm font-medium text-foreground">
-                {template.name}
-              </div>
-              <div className="text-xs text-subtitle mt-1">
-                {template.description}
-              </div>
-            </button>
-          ))}
+              返回模板选择
+            </Link>
+          ) : null}
+          <Link
+            href="/"
+            className="text-sm font-medium text-foreground border border-unfocused-border-color rounded-geist px-3 py-2 hover:border-focused-border-color"
+          >
+            返回渲染页面
+          </Link>
         </div>
       </div>
       <form

@@ -279,6 +279,24 @@ const Home: NextPage = () => {
     }
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!("serviceWorker" in navigator)) {
+      return;
+    }
+    const register = () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {
+        return;
+      });
+    };
+    window.addEventListener("load", register, { once: true });
+    return () => {
+      window.removeEventListener("load", register);
+    };
+  }, []);
+
   const persistWorks = (nextWorks: WorkItem[]) => {
     setWorks(nextWorks);
     if (typeof window === "undefined") {
@@ -1133,7 +1151,7 @@ const Home: NextPage = () => {
               </div>
               <div className="flex flex-wrap gap-3">
                 <Link
-                  href="/works/new"
+                  href="/works/new/template-selection"
                   className="border-foreground border rounded-geist bg-foreground text-background px-geist-half font-geist h-10 font-medium transition-all duration-150 ease-in-out inline-flex items-center text-sm hover:bg-background hover:text-foreground hover:border-focused-border-color"
                 >
                   新增作品
