@@ -23,8 +23,13 @@ export const RenderControls: React.FC<{
   composition: CompositionConfig;
 }> = ({ text, setText, inputProps, serverInputProps, composition }) => {
   const [mode, setMode] = useState<"browser" | "server">("server");
+  const [outputPath, setOutputPath] = useState("");
 
-  const serverRenderer = useServerRendering(COMP_NAME, serverInputProps);
+  const serverRenderer = useServerRendering(
+    COMP_NAME,
+    serverInputProps,
+    outputPath,
+  );
   const browserRenderer = useBrowserRendering(composition, inputProps);
 
   const { renderMedia, state, undo, downloadVideo } =
@@ -58,6 +63,21 @@ export const RenderControls: React.FC<{
             text={text}
           ></Input>
           <Spacing></Spacing>
+          {mode === "server" ? (
+            <>
+              <label className="flex flex-col gap-2 text-sm text-foreground">
+                输出路径
+                <input
+                  className="leading-[1.7] block w-full rounded-geist bg-background p-geist-half text-foreground text-sm border border-unfocused-border-color transition-colors duration-150 ease-in-out focus:border-focused-border-color outline-none"
+                  disabled={state.status === "preparing"}
+                  value={outputPath}
+                  onChange={(e) => setOutputPath(e.currentTarget.value)}
+                  placeholder="例如：C:\Videos\my-video.mp4 或 C:\Videos"
+                />
+              </label>
+              <Spacing></Spacing>
+            </>
+          ) : null}
           <AlignEnd>
             <Button
               disabled={state.status === "preparing"}

@@ -4,7 +4,7 @@ import { existsSync } from 'fs';
 import { createServer } from 'http';
 import { access, readFile, readdir, stat, unlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { basename, dirname, extname, join } from 'path';
+import { basename, dirname, extname, isAbsolute, join } from 'path';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -12,6 +12,7 @@ export const maxDuration = 300;
 
 const renderRequestSchema = z.object({
   compositionId: z.string(),
+  outputPath: z.string().optional(),
   inputProps: z.object({
     title: z.string().optional(),
     subtitle: z.string().optional(),
@@ -145,11 +146,45 @@ const waitForFile = async (filePath: string, timeoutMs: number) => {
 
 const videoExtensions = ['.mp4', '.webm', '.mov', '.mkv'];
 
+const getSafeTitle = (title?: string) => {
+  const resolved = title?.trim() ? title.trim() : 'untitled';
+  return resolved.replace(/[^a-zA-Z0-9]/g, '_');
+};
+
+const resolveRequestedOutputPath = (
+  outputPath: string | undefined,
+  tmpDir: string,
+  title?: string,
+) => {
+  const fallback = join(tmpDir, `video-${Date.now()}.mp4`);
+  const trimmed = outputPath?.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  const resolved = isAbsolute(trimmed) ? trimmed : join(process.cwd(), trimmed);
+  const ext = extname(resolved).toLowerCase();
+  if (!ext) {
+    if (!existsSync(resolved)) {
+      throw new Error('Output directory does not exist.');
+    }
+    return join(resolved, `${getSafeTitle(title)}-${Date.now()}.mp4`);
+  }
+  const outputDir = dirname(resolved);
+  if (!existsSync(outputDir)) {
+    throw new Error('Output directory does not exist.');
+  }
+  if (videoExtensions.includes(ext)) {
+    return resolved;
+  }
+  return `${resolved}.mp4`;
+};
+
 const extractOutputFileFromLogs = (stdoutTail: string, stderrTail: string) => {
   const combined = `${stdoutTail}\n${stderrTail}`;
   const candidates: string[] = [];
   const extensionPattern = '(mp4|webm|mov|mkv)';
   const patterns = [
+    new RegExp(`file:\\/\\/\\/([A-Za-z]:\\/[^"\\s]+\\.${extensionPattern})`, 'gi'),
     new RegExp(`"([A-Za-z]:\\\\[^"]+?\\.${extensionPattern})"`, 'gi'),
     new RegExp(`"([A-Za-z]:\\/[^"]+?\\.${extensionPattern})"`, 'gi'),
     new RegExp(`([A-Za-z]:\\\\[^\\s]+\\.${extensionPattern})`, 'gi'),
@@ -173,7 +208,7 @@ const extractOutputFileFromLogs = (stdoutTail: string, stderrTail: string) => {
 
 const findLatestVideoFile = async (
   rootDir: string,
-  renderStart: number,
+  minMtimeMs: number,
   maxDepth: number,
 ) => {
   const queue: Array<{ dir: string; depth: number }> = [
@@ -199,7 +234,7 @@ const findLatestVideoFile = async (
         videoExtensions.some((ext) => entry.name.toLowerCase().endsWith(ext))
       ) {
         const entryStat = await stat(entryPath);
-        if (entryStat.mtimeMs >= renderStart - 1000 && entryStat.mtimeMs > latestTime) {
+        if (entryStat.mtimeMs >= minMtimeMs && entryStat.mtimeMs > latestTime) {
           latestTime = entryStat.mtimeMs;
           latestPath = entryPath;
         }
@@ -207,6 +242,40 @@ const findLatestVideoFile = async (
     }
   }
   return latestPath;
+};
+
+const listVideoFiles = async (rootDir: string, maxDepth: number) => {
+  const queue: Array<{ dir: string; depth: number }> = [
+    { dir: rootDir, depth: 0 },
+  ];
+  const results: Array<{ path: string; mtimeMs: number; size: number }> = [];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) {
+      break;
+    }
+    const entries = await readdir(current.dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = join(current.dir, entry.name);
+      if (entry.isDirectory()) {
+        if (current.depth < maxDepth) {
+          queue.push({ dir: entryPath, depth: current.depth + 1 });
+        }
+        continue;
+      }
+      if (
+        videoExtensions.some((ext) => entry.name.toLowerCase().endsWith(ext))
+      ) {
+        const entryStat = await stat(entryPath);
+        results.push({
+          path: entryPath,
+          mtimeMs: entryStat.mtimeMs,
+          size: entryStat.size,
+        });
+      }
+    }
+  }
+  return results;
 };
 
 const resolveOutputFile = async (
@@ -289,9 +358,41 @@ const resolveOutputFile = async (
     if (fallbackLatestTime > 0) {
       return join(tmpDir, fallbackLatest);
     }
-    const recursiveMatch = await findLatestVideoFile(tmpDir, renderStart, 2);
+    const recursiveMatch = await findLatestVideoFile(
+      tmpDir,
+      renderStart - 1000,
+      6,
+    );
     if (recursiveMatch) {
       return recursiveMatch;
+    }
+    const outputDirMatch =
+      outputDir !== tmpDir
+        ? await findLatestVideoFile(outputDir, renderStart - 1000, 5)
+        : undefined;
+    if (outputDirMatch) {
+      return outputDirMatch;
+    }
+    const cwdMatch = await findLatestVideoFile(
+      process.cwd(),
+      renderStart - 1000,
+      4,
+    );
+    if (cwdMatch) {
+      return cwdMatch;
+    }
+    const looseTmpMatch = await findLatestVideoFile(tmpDir, 0, 6);
+    if (looseTmpMatch) {
+      return looseTmpMatch;
+    }
+    const looseOutputMatch =
+      outputDir !== tmpDir ? await findLatestVideoFile(outputDir, 0, 5) : undefined;
+    if (looseOutputMatch) {
+      return looseOutputMatch;
+    }
+    const looseCwdMatch = await findLatestVideoFile(process.cwd(), 0, 4);
+    if (looseCwdMatch) {
+      return looseCwdMatch;
     }
     return undefined;
   } catch {
@@ -344,7 +445,7 @@ const startFileServer = async (
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { compositionId, inputProps } = renderRequestSchema.parse(body);
+    const { compositionId, inputProps, outputPath } = renderRequestSchema.parse(body);
 
     // 创建流式响应
     const stream = new ReadableStream({
@@ -378,7 +479,6 @@ export async function POST(request: NextRequest) {
           localServer = serverInfo.server;
           localBaseUrl = serverInfo.baseUrl;
           propsFile = join(tmpDir, `props-${Date.now()}.json`);
-          outputFile = join(tmpDir, `video-${Date.now()}.mp4`);
           const nextInputProps = { ...inputProps };
 
           if (inputProps.coverImageDataUrl) {
@@ -435,17 +535,22 @@ export async function POST(request: NextRequest) {
           }
 
           await writeFile(propsFile, JSON.stringify(nextInputProps));
+          outputFile = resolveRequestedOutputPath(
+            outputPath,
+            tmpDir,
+            nextInputProps.title,
+          );
           sendProgress({ stage: 'preparing', progress: 50 });
 
           // 2. 使用Remotion CLI渲染
           sendProgress({ stage: 'rendering', progress: 0 });
           
           const browserExecutable = resolveBrowserExecutable();
-          const durationArg =
+          const durationFrames =
             typeof nextInputProps.durationInFrames === 'number' &&
             nextInputProps.durationInFrames > 0
-              ? ` --duration-in-frames=${Math.floor(nextInputProps.durationInFrames)}`
-              : '';
+              ? Math.floor(nextInputProps.durationInFrames)
+              : undefined;
           const buildRenderArgs = (): string[] => {
             if (!propsFile || !outputFile) {
               throw new Error('Props file or output file is missing.');
@@ -463,18 +568,20 @@ export async function POST(request: NextRequest) {
               cliEntryFile,
               compositionId,
               cliOutputFile,
-              `--props=${cliPropsFile}`,
+              '--props',
+              cliPropsFile,
               '--log=verbose',
             ];
             if (browserExecutable) {
               args.push(
-                `--browser-executable=${browserExecutable.replace(/\\/g, '/')}`,
+                '--browser-executable',
+                browserExecutable.replace(/\\/g, '/'),
               );
             } else {
               args.push('--chrome-mode=chrome-for-testing');
             }
-            if (durationArg) {
-              args.push(durationArg.trim());
+            if (durationFrames) {
+              args.push('--duration-in-frames', String(durationFrames));
             }
             return args;
           };
@@ -487,6 +594,8 @@ export async function POST(request: NextRequest) {
 
           // 执行命令并捕获进度
           const renderStart = Date.now();
+          const preRenderFiles = await listVideoFiles(tmpDir, 3);
+          const preRenderFileSet = new Set(preRenderFiles.map((item) => item.path));
           const childProcess = spawn('node', [
             './node_modules/@remotion/cli/dist/index.js',
             ...renderArgs.slice(1),
@@ -583,6 +692,40 @@ export async function POST(request: NextRequest) {
             resolvedOutputFile = await resolveOutputFile(outputFile, tmpDir, renderStart);
           }
           if (!resolvedOutputFile) {
+            const outputDir = dirname(outputFile);
+            const postTmpFiles = await listVideoFiles(tmpDir, 6);
+            const postOutputFiles =
+              outputDir !== tmpDir ? await listVideoFiles(outputDir, 5) : [];
+            const postCwdFiles = await listVideoFiles(process.cwd(), 4);
+            const allCandidates = [
+              ...postTmpFiles,
+              ...postOutputFiles,
+              ...postCwdFiles,
+            ];
+            const newFiles = allCandidates.filter(
+              (item) =>
+                !preRenderFileSet.has(item.path) &&
+                item.mtimeMs >= renderStart - 1000 &&
+                item.size > 0,
+            );
+            const recentFiles =
+              newFiles.length > 0
+                ? newFiles
+                : allCandidates.filter(
+                    (item) => item.mtimeMs >= renderStart - 1000 && item.size > 0,
+                  );
+            const fallbackFiles =
+              recentFiles.length > 0
+                ? recentFiles
+                : allCandidates.filter((item) => item.size > 0);
+            const latestCandidate = fallbackFiles.sort(
+              (a, b) => b.mtimeMs - a.mtimeMs,
+            )[0];
+            if (latestCandidate?.path) {
+              resolvedOutputFile = latestCandidate.path;
+            }
+          }
+          if (!resolvedOutputFile) {
             throw new Error(
               `Render completed without output file.${
                 stderrTail ? `\n${stderrTail}` : ''
@@ -593,16 +736,14 @@ export async function POST(request: NextRequest) {
           const videoBase64 = videoBuffer.toString('base64');
 
           // 5. 发送最终结果
-          const resolvedTitle =
-            nextInputProps.title && nextInputProps.title.trim().length > 0
-              ? nextInputProps.title.trim()
-              : 'untitled';
-          const safeTitle = resolvedTitle.replace(/[^a-zA-Z0-9]/g, '_');
+          const fileName = resolvedOutputFile
+            ? basename(resolvedOutputFile)
+            : `${getSafeTitle(nextInputProps.title)}.mp4`;
           sendProgress({ 
             stage: 'done', 
             progress: 100,
             videoBase64,
-            fileName: `${safeTitle}.mp4`
+            fileName
           });
 
           controller.close();
