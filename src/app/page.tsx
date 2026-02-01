@@ -276,6 +276,7 @@ const Home: NextPage = () => {
   );
   const [works, setWorks] = useState<WorkItem[]>([]);
   const [selectedWorkId, setSelectedWorkId] = useState<string>("builtin");
+  const [appliedWorkId, setAppliedWorkId] = useState<string>("builtin");
   const imageMediaIds = useMemo(() => {
     return imageSequenceItems
       .filter((item) => item.type === "upload" && item.mediaId)
@@ -395,6 +396,7 @@ const Home: NextPage = () => {
       setSubtitles(defaultMyCompProps.subtitles ?? []);
       setImageEffect(defaultMyCompProps.imageEffect ?? "none");
       setTransitionEffect(defaultMyCompProps.transitionEffect ?? "fade");
+      setAppliedWorkId("builtin");
       return;
     }
     const selected = availableWorks.find((work) => work.id === selectedWorkId);
@@ -560,6 +562,7 @@ const Home: NextPage = () => {
       setSubtitles(selected.subtitles ?? []);
       setImageEffect(selected.imageEffect ?? "none");
       setTransitionEffect(selected.transitionEffect ?? "fade");
+      setAppliedWorkId(selectedWorkId);
     }
   }, [availableWorks, selectedWorkId]);
 
@@ -1399,6 +1402,7 @@ const Home: NextPage = () => {
     logoImageMediaId,
     logoImageServerDataUrl,
   ]);
+  const serverSelectionReady = appliedWorkId === selectedWorkId;
 
   const handleDeleteWork = (id: string) => {
     const nextWorks = works.filter((work) => work.id !== id);
@@ -1507,11 +1511,13 @@ const Home: NextPage = () => {
           ) : null}
         </div>
         <RenderControls
+          key={`render-${selectedWorkId}`}
           text={text}
           setText={setText}
           inputProps={inputProps}
           serverInputProps={serverInputProps}
           serverMediaReady={serverMediaReady}
+          serverSelectionReady={serverSelectionReady}
           composition={{
             component: Main,
             id: COMP_NAME,

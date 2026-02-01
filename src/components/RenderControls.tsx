@@ -21,6 +21,7 @@ export const RenderControls: React.FC<{
   inputProps: z.infer<typeof CompositionProps>;
   serverInputProps: z.infer<typeof CompositionProps>;
   serverMediaReady: boolean;
+  serverSelectionReady: boolean;
   composition: CompositionConfig;
 }> = ({
   text,
@@ -28,6 +29,7 @@ export const RenderControls: React.FC<{
   inputProps,
   serverInputProps,
   serverMediaReady,
+  serverSelectionReady,
   composition,
 }) => {
   const [mode, setMode] = useState<"browser" | "server">("server");
@@ -43,7 +45,8 @@ export const RenderControls: React.FC<{
   const { renderMedia, state, undo, downloadVideo } =
     mode === "server" ? serverRenderer : browserRenderer;
   const canStartRender =
-    state.status !== "preparing" && (mode !== "server" || serverMediaReady);
+    state.status !== "preparing" &&
+    (mode !== "server" || (serverMediaReady && serverSelectionReady));
 
   return (
     <InputContainer>
@@ -100,6 +103,11 @@ export const RenderControls: React.FC<{
           {mode === "server" && !serverMediaReady ? (
             <div className="text-xs text-subtitle">
               上传素材正在转换中，完成后即可开始服务器渲染
+            </div>
+          ) : null}
+          {mode === "server" && serverMediaReady && !serverSelectionReady ? (
+            <div className="text-xs text-subtitle">
+              作品切换中，请稍候再开始渲染
             </div>
           ) : null}
           {state.status === "error" ? (
