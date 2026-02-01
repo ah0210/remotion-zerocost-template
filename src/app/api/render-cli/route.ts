@@ -543,7 +543,7 @@ export async function POST(request: NextRequest) {
           sendProgress({ stage: 'preparing', progress: 50 });
 
           // 2. 使用Remotion CLI渲染
-          sendProgress({ stage: 'rendering', progress: 0 });
+          sendProgress({ stage: 'bundling', progress: 0 });
           
           const browserExecutable = resolveBrowserExecutable();
           const durationFrames =
@@ -587,6 +587,17 @@ export async function POST(request: NextRequest) {
           };
 
           const renderArgs = buildRenderArgs();
+          const inputSummary = {
+            title: nextInputProps.title ?? '',
+            coverImage: Boolean(nextInputProps.coverImageDataUrl),
+            coverVideo: Boolean(nextInputProps.coverVideoDataUrl),
+            imageCount:
+              nextInputProps.imageSequence?.length ??
+              nextInputProps.imageArray?.length ??
+              0,
+            audio: Boolean(nextInputProps.audioDataUrl),
+          };
+          console.log('Render input summary:', inputSummary);
           console.log(
             'Executing command:',
             `node ${renderArgs.join(' ')}`.replace('node remotion', 'npx remotion'),
@@ -606,6 +617,7 @@ export async function POST(request: NextRequest) {
           });
 
           let lastProgress = 0;
+          let lastStage: 'bundling' | 'rendering' | 'finalizing' = 'bundling';
           let stderrTail = '';
           let stdoutTail = '';
           
@@ -618,14 +630,53 @@ export async function POST(request: NextRequest) {
               stdoutTail = stdoutTail.slice(-8000);
             }
             
-            // 尝试解析进度信息
+            const lowerOutput = output.toLowerCase();
+            if (
+              lastStage !== 'bundling' &&
+              (lowerOutput.includes('bundle') || lowerOutput.includes('bundling'))
+            ) {
+              lastStage = 'bundling';
+              sendProgress({ stage: 'bundling', progress: 0 });
+            }
+            const renderedMatch = output.match(/Rendered\s+(\d+)\s*\/\s*(\d+)/i);
+            const renderingMatch = output.match(
+              /Rendering\s+frame\s+(\d+)\s*\/\s*(\d+)/i,
+            );
+            const frameMatch = renderedMatch ?? renderingMatch;
+            if (frameMatch) {
+              const current = Number(frameMatch[1]);
+              const total = Number(frameMatch[2]);
+              if (total > 0) {
+                const progress = Math.min(
+                  100,
+                  Math.max(0, Math.floor((current / total) * 100)),
+                );
+                if (progress > lastProgress) {
+                  lastProgress = progress;
+                  lastStage = 'rendering';
+                  sendProgress({ stage: 'rendering', progress });
+                  console.log(`Render progress ${progress}%`);
+                }
+              }
+              return;
+            }
             const progressMatch = output.match(/(\d+)%/);
             if (progressMatch) {
               const progress = parseInt(progressMatch[1]);
               if (progress > lastProgress) {
                 lastProgress = progress;
+                lastStage = 'rendering';
                 sendProgress({ stage: 'rendering', progress });
+                console.log(`Render progress ${progress}%`);
               }
+              return;
+            }
+            if (
+              lastStage !== 'rendering' &&
+              (lowerOutput.includes('rendering') || lowerOutput.includes('rendered'))
+            ) {
+              lastStage = 'rendering';
+              sendProgress({ stage: 'rendering', progress: lastProgress });
             }
           });
 

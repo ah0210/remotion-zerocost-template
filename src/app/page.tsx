@@ -1369,6 +1369,37 @@ const Home: NextPage = () => {
     durationInFrames,
   ]);
 
+  const serverMediaReady = useMemo(() => {
+    const singleReady =
+      (!coverImageMediaId || !!coverImageServerDataUrl) &&
+      (!coverVideoMediaId || !!coverVideoServerDataUrl) &&
+      (!logoImageMediaId || !!logoImageServerDataUrl) &&
+      (!audioMediaId || !!audioServerDataUrl);
+    const listReady =
+      coverImageMediaIds.every((id) => coverImageServerDataUrlMap.has(id)) &&
+      coverVideoMediaIds.every((id) => coverVideoServerDataUrlMap.has(id)) &&
+      audioMediaIds.every((id) => audioServerDataUrlMap.has(id)) &&
+      imageMediaIds.every((id) => imageServerDataUrlMap.has(id));
+    return singleReady && listReady;
+  }, [
+    audioMediaId,
+    audioMediaIds,
+    audioServerDataUrl,
+    audioServerDataUrlMap,
+    coverImageMediaId,
+    coverImageMediaIds,
+    coverImageServerDataUrl,
+    coverImageServerDataUrlMap,
+    coverVideoMediaId,
+    coverVideoMediaIds,
+    coverVideoServerDataUrl,
+    coverVideoServerDataUrlMap,
+    imageMediaIds,
+    imageServerDataUrlMap,
+    logoImageMediaId,
+    logoImageServerDataUrl,
+  ]);
+
   const handleDeleteWork = (id: string) => {
     const nextWorks = works.filter((work) => work.id !== id);
     persistWorks(nextWorks);
@@ -1479,7 +1510,8 @@ const Home: NextPage = () => {
           text={text}
           setText={setText}
           inputProps={inputProps}
-        serverInputProps={serverInputProps}
+          serverInputProps={serverInputProps}
+          serverMediaReady={serverMediaReady}
           composition={{
             component: Main,
             id: COMP_NAME,

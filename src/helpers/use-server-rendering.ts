@@ -53,13 +53,14 @@ export const useServerRendering = (
   inputProps: z.infer<typeof CompositionProps>,
   outputPath?: string,
 ) => {
+  const initialProgress = 0.02;
   const [state, setState] = useState<State>({
     status: "init",
   });
 
   const renderMedia = useCallback(async () => {
     try {
-      setState({ status: "preparing" });
+      setState({ status: "bundling", progress: initialProgress });
 
       // 使用CLI渲染API
       const response = await fetch('/api/render-cli', {
@@ -124,16 +125,25 @@ export const useServerRendering = (
               case 'bundling':
                 setState({
                   status: 'bundling',
-                  progress: (data.progress ?? 0) / 100,
+                  progress: Math.max(
+                    initialProgress,
+                    (data.progress ?? 0) / 100,
+                  ),
                 });
                 break;
               case 'preparing':
-                setState({ status: 'preparing' });
+                setState({
+                  status: 'bundling',
+                  progress: initialProgress,
+                });
                 break;
               case 'rendering':
                 setState({
                   status: 'rendering',
-                  progress: (data.progress ?? 0) / 100,
+                  progress: Math.max(
+                    initialProgress,
+                    (data.progress ?? 0) / 100,
+                  ),
                 });
                 break;
               case 'finalizing':
