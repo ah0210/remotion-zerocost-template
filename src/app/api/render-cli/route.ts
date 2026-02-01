@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { spawn } from 'child_process';
-import { existsSync } from 'fs';
+import { createReadStream, existsSync } from 'fs';
 import { createServer } from 'http';
 import { access, readFile, readdir, stat, unlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -12,6 +12,7 @@ export const maxDuration = 300;
 
 const renderRequestSchema = z.object({
   compositionId: z.string(),
+  workId: z.string().optional(),
   outputPath: z.string().optional(),
   inputProps: z.object({
     title: z.string().optional(),
@@ -142,6 +143,28 @@ const waitForFile = async (filePath: string, timeoutMs: number) => {
     }
   }
   return false;
+};
+
+const readFileWithProgress = async (
+  filePath: string,
+  onProgress: (progress: number) => void,
+) => {
+  const fileStat = await stat(filePath);
+  const total = fileStat.size;
+  return await new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let loaded = 0;
+    const stream = createReadStream(filePath);
+    stream.on('data', (chunk: Buffer) => {
+      chunks.push(chunk);
+      loaded += chunk.length;
+      if (total > 0) {
+        onProgress(Math.floor((loaded / total) * 100));
+      }
+    });
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+  });
 };
 
 const videoExtensions = ['.mp4', '.webm', '.mov', '.mkv'];
@@ -381,19 +404,6 @@ const resolveOutputFile = async (
     if (cwdMatch) {
       return cwdMatch;
     }
-    const looseTmpMatch = await findLatestVideoFile(tmpDir, 0, 6);
-    if (looseTmpMatch) {
-      return looseTmpMatch;
-    }
-    const looseOutputMatch =
-      outputDir !== tmpDir ? await findLatestVideoFile(outputDir, 0, 5) : undefined;
-    if (looseOutputMatch) {
-      return looseOutputMatch;
-    }
-    const looseCwdMatch = await findLatestVideoFile(process.cwd(), 0, 4);
-    if (looseCwdMatch) {
-      return looseCwdMatch;
-    }
     return undefined;
   } catch {
     return undefined;
@@ -445,7 +455,7 @@ const startFileServer = async (
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { compositionId, inputProps, outputPath } = renderRequestSchema.parse(body);
+    const { compositionId, inputProps, outputPath, workId } = renderRequestSchema.parse(body);
 
     // 创建流式响应
     const stream = new ReadableStream({
@@ -480,6 +490,20 @@ export async function POST(request: NextRequest) {
           localBaseUrl = serverInfo.baseUrl;
           propsFile = join(tmpDir, `props-${Date.now()}.json`);
           const nextInputProps = { ...inputProps };
+
+          const rewriteDataUrl = async (value: string, prefix: string) => {
+            const result = await writeDataUrlToTempFile(
+              value,
+              prefix,
+              tmpDir,
+              localBaseUrl,
+              fileMap,
+            );
+            if (result.filePath) {
+              tempFiles.push(result.filePath);
+            }
+            return result.value;
+          };
 
           if (inputProps.coverImageDataUrl) {
             const result = await writeDataUrlToTempFile(
@@ -532,6 +556,51 @@ export async function POST(request: NextRequest) {
             if (result.filePath) {
               tempFiles.push(result.filePath);
             }
+          }
+          if (inputProps.imageArray && inputProps.imageArray.length > 0) {
+            const nextImageArray: string[] = [];
+            for (const src of inputProps.imageArray) {
+              nextImageArray.push(await rewriteDataUrl(src, 'image'));
+            }
+            nextInputProps.imageArray = nextImageArray;
+          }
+          if (inputProps.imageSequence && inputProps.imageSequence.length > 0) {
+            const nextImageSequence = [];
+            for (const item of inputProps.imageSequence) {
+              const src = await rewriteDataUrl(item.src, 'image-seq');
+              nextImageSequence.push({ ...item, src });
+            }
+            nextInputProps.imageSequence = nextImageSequence;
+          }
+          if (
+            inputProps.coverImageSequence &&
+            inputProps.coverImageSequence.length > 0
+          ) {
+            const nextCoverImageSequence = [];
+            for (const item of inputProps.coverImageSequence) {
+              const src = await rewriteDataUrl(item.src, 'cover-image-seq');
+              nextCoverImageSequence.push({ ...item, src });
+            }
+            nextInputProps.coverImageSequence = nextCoverImageSequence;
+          }
+          if (
+            inputProps.coverVideoSequence &&
+            inputProps.coverVideoSequence.length > 0
+          ) {
+            const nextCoverVideoSequence = [];
+            for (const item of inputProps.coverVideoSequence) {
+              const src = await rewriteDataUrl(item.src, 'cover-video-seq');
+              nextCoverVideoSequence.push({ ...item, src });
+            }
+            nextInputProps.coverVideoSequence = nextCoverVideoSequence;
+          }
+          if (inputProps.audioSequence && inputProps.audioSequence.length > 0) {
+            const nextAudioSequence = [];
+            for (const item of inputProps.audioSequence) {
+              const src = await rewriteDataUrl(item.src, 'audio-seq');
+              nextAudioSequence.push({ ...item, src });
+            }
+            nextInputProps.audioSequence = nextAudioSequence;
           }
 
           await writeFile(propsFile, JSON.stringify(nextInputProps));
@@ -588,6 +657,7 @@ export async function POST(request: NextRequest) {
 
           const renderArgs = buildRenderArgs();
           const inputSummary = {
+            workId: workId ?? '',
             title: nextInputProps.title ?? '',
             coverImage: Boolean(nextInputProps.coverImageDataUrl),
             coverVideo: Boolean(nextInputProps.coverVideoDataUrl),
@@ -621,15 +691,21 @@ export async function POST(request: NextRequest) {
           let stderrTail = '';
           let stdoutTail = '';
           
-          // 监听stdout以获取进度信息
-          childProcess.stdout?.on('data', (data: Buffer) => {
-            const output = data.toString();
-            console.log('Remotion output:', output);
-            stdoutTail = `${stdoutTail}${output}`;
-            if (stdoutTail.length > 8000) {
-              stdoutTail = stdoutTail.slice(-8000);
+          const handleOutput = (output: string, source: 'stdout' | 'stderr') => {
+            if (source === 'stdout') {
+              console.log('Remotion output:', output);
+              stdoutTail = `${stdoutTail}${output}`;
+              if (stdoutTail.length > 8000) {
+                stdoutTail = stdoutTail.slice(-8000);
+              }
+            } else {
+              console.error('Remotion error:', output);
+              stderrTail = `${stderrTail}${output}`;
+              if (stderrTail.length > 8000) {
+                stderrTail = stderrTail.slice(-8000);
+              }
             }
-            
+
             const lowerOutput = output.toLowerCase();
             if (
               lastStage !== 'bundling' &&
@@ -678,15 +754,14 @@ export async function POST(request: NextRequest) {
               lastStage = 'rendering';
               sendProgress({ stage: 'rendering', progress: lastProgress });
             }
+          };
+
+          childProcess.stdout?.on('data', (data: Buffer) => {
+            handleOutput(data.toString(), 'stdout');
           });
 
           childProcess.stderr?.on('data', (data: Buffer) => {
-            const chunk = data.toString();
-            console.error('Remotion error:', chunk);
-            stderrTail = `${stderrTail}${chunk}`;
-            if (stderrTail.length > 8000) {
-              stderrTail = stderrTail.slice(-8000);
-            }
+            handleOutput(data.toString(), 'stderr');
           });
 
           abortHandler = () => {
@@ -783,7 +858,17 @@ export async function POST(request: NextRequest) {
               }${stdoutTail ? `\n${stdoutTail}` : ''}`,
             );
           }
-          const videoBuffer = await readFile(resolvedOutputFile);
+          const videoBuffer = await readFileWithProgress(
+            resolvedOutputFile,
+            (progress) => {
+              if (progress > 0) {
+                sendProgress({
+                  stage: 'finalizing',
+                  progress: Math.min(99, Math.max(1, progress)),
+                });
+              }
+            },
+          );
           const videoBase64 = videoBuffer.toString('base64');
 
           // 5. 发送最终结果

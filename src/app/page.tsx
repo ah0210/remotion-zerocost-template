@@ -1516,6 +1516,7 @@ const Home: NextPage = () => {
           setText={setText}
           inputProps={inputProps}
           serverInputProps={serverInputProps}
+          selectedWorkId={selectedWorkId}
           serverMediaReady={serverMediaReady}
           serverSelectionReady={serverSelectionReady}
           composition={{

@@ -20,6 +20,7 @@ export const RenderControls: React.FC<{
   setText: Dispatch<SetStateAction<string>>;
   inputProps: z.infer<typeof CompositionProps>;
   serverInputProps: z.infer<typeof CompositionProps>;
+  selectedWorkId: string;
   serverMediaReady: boolean;
   serverSelectionReady: boolean;
   composition: CompositionConfig;
@@ -28,6 +29,7 @@ export const RenderControls: React.FC<{
   setText,
   inputProps,
   serverInputProps,
+  selectedWorkId,
   serverMediaReady,
   serverSelectionReady,
   composition,
@@ -38,6 +40,7 @@ export const RenderControls: React.FC<{
   const serverRenderer = useServerRendering(
     COMP_NAME,
     serverInputProps,
+    selectedWorkId,
     outputPath,
   );
   const browserRenderer = useBrowserRendering(composition, inputProps);

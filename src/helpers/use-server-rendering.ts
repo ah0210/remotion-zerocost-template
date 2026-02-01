@@ -51,6 +51,7 @@ const getSafeFileName = (title?: string) => {
 export const useServerRendering = (
   compositionId: string,
   inputProps: z.infer<typeof CompositionProps>,
+  workId?: string,
   outputPath?: string,
 ) => {
   const initialProgress = 0.02;
@@ -70,6 +71,7 @@ export const useServerRendering = (
         },
         body: JSON.stringify({
           compositionId,
+          workId,
           inputProps,
           outputPath: outputPath?.trim() ? outputPath.trim() : undefined,
         }),
@@ -181,7 +183,7 @@ export const useServerRendering = (
         error: error as Error,
       });
     }
-  }, [compositionId, inputProps, outputPath]);
+  }, [compositionId, inputProps, outputPath, workId]);
 
   const undo = useCallback(() => {
     setState({ status: "init" });
