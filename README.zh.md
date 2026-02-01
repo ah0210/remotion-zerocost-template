@@ -70,9 +70,8 @@ Remotion 官方模板非常出色，但它们通常引导您走向在 AWS Lambda
 ## 渲染方式
 
 -   **浏览器渲染（Browser Render）：** 前端直接调用 `@remotion/web-renderer`，在浏览器中生成视频 Blob 并下载。
--   **服务器渲染（Server Render）：** 前端请求 `/api/render-cli`，由服务端执行 `npx remotion render`，再把结果返回给前端下载。
 
-页面上的切换按钮可以在两种方式之间自由选择。
+当前版本仅保留浏览器渲染，方便以静态站点形式部署到 Vercel、Netlify 等平台。
 
 ## 如何定制
 
@@ -88,12 +87,19 @@ Remotion 官方模板非常出色，但它们通常引导您走向在 AWS Lambda
 
 ## 部署
 
-在任何静态托管提供商上免费部署此模板。由于该模板会生成一个完全静态的网站，因此可以免费托管在 Vercel 或 Netlify 等平台上，让您可以与任何人分享您的视频创作工具。
+本项目已配置为 Next.js 静态导出模式，构建后会生成 `out` 目录，可直接托管在任何静态平台。
+
+### 通过 GitHub 部署到 Vercel
+
+1.  将项目推送到 GitHub 仓库。
+2.  登录 Vercel，点击 **Add New** → **Project**，导入该仓库。
+3.  在项目配置中确认：
+    -   **Build Command**：`next build`
+    -   **Output Directory**：`out`
+4.  点击 **Deploy**，等待构建完成。
 
 [![使用 Vercel 部署](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fyour-username%2Fyour-repo-name)
 *(请记得将 Vercel 按钮中的存储库 URL 替换为您自己的！)*
-
-构建过程将创建一个标准的 Next.js 静态导出文件，可以托管在任何地方。
 
 ## Remotion 命令
 

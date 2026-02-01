@@ -39,7 +39,7 @@ export const Tips: React.FC = () => {
         description="了解如何用 React 定制这段视频。"
       ></Tip>
       <Tip
-        href="https://github.com/remotion-dev/template-next-app-dir"
+        href="https://www.17you.com"
         title="查看源码"
         description="前往该应用的 GitHub 仓库。"
       ></Tip>
