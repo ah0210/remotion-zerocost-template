@@ -8,8 +8,9 @@
 # testing
 /coverage
 
-# next.js /out/
+# next.js
 /.next/
+/out/
 
 # production
 /build
@@ -31,8 +32,9 @@ yarn.lock
 # vercel
 .vercel
 
-# typescript out/
+# typescript
 *.tsbuildinfo
 next-env.d.ts
+out/
 .env
 build
