@@ -226,23 +226,48 @@ export const useBrowserRendering = (
 
       const { renderMediaOnWeb } = await import("@remotion/web-renderer");
 
-      const result = await renderMediaOnWeb({
-        composition,
-        inputProps,
-        onProgress: (progress) => {
-          const renderedFrames =
-            progress.encodedFrames ?? progress.renderedFrames ?? 0;
-          const normalized =
-            composition.durationInFrames === 0
-              ? 0
-              : renderedFrames / composition.durationInFrames;
-          const clamped = Math.max(0, Math.min(1, normalized));
-          setState({
-            status: "rendering",
-            progress: clamped,
-          });
-        },
-      });
+      const shouldFallbackToArrayBuffer = (error: unknown) => {
+        const message =
+          error instanceof Error
+            ? error.message
+            : typeof error === "string"
+              ? error
+              : "";
+        return (
+          message.includes("getFileHandle") &&
+          message.toLowerCase().includes("name is not allowed")
+        );
+      };
+
+      const onProgress = (progress: { renderedFrames?: number; encodedFrames?: number }) => {
+        const renderedFrames = progress.encodedFrames ?? progress.renderedFrames ?? 0;
+        const normalized =
+          composition.durationInFrames === 0 ? 0 : renderedFrames / composition.durationInFrames;
+        const clamped = Math.max(0, Math.min(1, normalized));
+        setState({
+          status: "rendering",
+          progress: clamped,
+        });
+      };
+
+      const renderWithTarget = (outputTarget: "web-fs" | "arraybuffer") => {
+        return renderMediaOnWeb({
+          composition,
+          inputProps,
+          outputTarget,
+          onProgress,
+        });
+      };
+
+      let result;
+      try {
+        result = await renderWithTarget("web-fs");
+      } catch (error) {
+        if (!shouldFallbackToArrayBuffer(error)) {
+          throw error;
+        }
+        result = await renderWithTarget("arraybuffer");
+      }
 
       const videoBlob = await result.getBlob();
 

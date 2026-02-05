@@ -44,9 +44,9 @@ export const Tips: React.FC = () => {
         description="前往该应用的 GitHub 仓库。"
       ></Tip>
       <Tip
-        href="https://remotion.dev/discord"
-        title="加入社区"
-        description="在 Discord 与其他开发者交流。"
+        href="https://17you.com/tool/remotion%E5%9C%A8%E7%BA%BF%E8%A7%86%E9%A2%91%E7%94%9F%E6%88%90%E6%97%A0%E9%9C%80%E6%9C%8D%E5%8A%A1%E5%99%A8%E6%97%A0%E9%9C%80aws/"
+        title="使用和评论"
+        description="留言和讨论"
       ></Tip>
     </div>
   );
