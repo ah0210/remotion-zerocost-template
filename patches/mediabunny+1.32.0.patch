@@ -1,0 +1,39 @@
+diff --git a/node_modules/mediabunny/dist/modules/src/conversion.js b/node_modules/mediabunny/dist/modules/src/conversion.js
+index 0f41e9c..2fea5c6 100644
+--- a/node_modules/mediabunny/dist/modules/src/conversion.js
++++ b/node_modules/mediabunny/dist/modules/src/conversion.js
+@@ -1269,10 +1269,30 @@ export class AudioResampler {
+         }
+         const requiredSamples = audioSample.numberOfFrames * audioSample.numberOfChannels;
+         this.ensureTempBufferSize(requiredSamples);
+-        // Copy the audio data to the temp buffer
+-        const sourceDataSize = audioSample.allocationSize({ planeIndex: 0, format: 'f32' });
+-        const sourceView = new Float32Array(this.tempSourceBuffer.buffer, 0, sourceDataSize / 4);
+-        audioSample.copyTo(sourceView, { planeIndex: 0, format: 'f32' });
++        const sourceView = new Float32Array(this.tempSourceBuffer.buffer, 0, requiredSamples);
++        let copied = false;
++        try {
++            const sourceDataSize = audioSample.allocationSize({ planeIndex: 0, format: 'f32' });
++            const sourceLength = Math.min(requiredSamples, sourceDataSize / 4);
++            const interleavedView = new Float32Array(this.tempSourceBuffer.buffer, 0, sourceLength);
++            audioSample.copyTo(interleavedView, { planeIndex: 0, format: 'f32' });
++            copied = true;
++        }
++        catch {
++            copied = false;
++        }
++        if (!copied) {
++            const frames = audioSample.numberOfFrames;
++            const channels = audioSample.numberOfChannels;
++            for (let channel = 0; channel < channels; channel++) {
++                const planeSize = audioSample.allocationSize({ planeIndex: channel, format: 'f32-planar' });
++                const plane = new Float32Array(planeSize / 4);
++                audioSample.copyTo(plane, { planeIndex: channel, format: 'f32-planar' });
++                for (let frame = 0; frame < frames; frame++) {
++                    sourceView[frame * channels + channel] = plane[frame] ?? 0;
++                }
++            }
++        }
+         const inputStartTime = audioSample.timestamp - this.startTime;
+         const inputDuration = audioSample.numberOfFrames / this.sourceSampleRate;
+         const inputEndTime = Math.min(inputStartTime + inputDuration, this.endTime - this.startTime);

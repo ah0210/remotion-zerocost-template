@@ -50,14 +50,19 @@
     "postcss": "8.5.6",
     "prettier": "3.8.1",
     "tailwindcss": "4.1.18",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "patch-package": "8.0.0"
   },
   "scripts": {
+    "postinstall": "patch-package",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "remotion": "remotion studio",
     "render": "remotion render"
+  },
+  "overrides": {
+    "mediabunny": "1.32.0"
   }
 }
