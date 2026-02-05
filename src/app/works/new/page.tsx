@@ -1495,7 +1495,7 @@ const NewWorkContent = () => {
   };
 
   return (
-    <div className="max-w-screen-md m-auto mb-12 mt-16 font-geist px-4">
+    <div className="max-w-screen-md m-auto mb-12 mt-10 font-geist px-4">
       <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
         <div>
           <div className="text-xs text-subtitle">步骤 2/2</div>
@@ -2583,7 +2583,7 @@ const NewWorkPage = () => {
   return (
     <Suspense
       fallback={
-        <div className="max-w-screen-md m-auto mb-12 mt-16 font-geist px-4 text-sm text-subtitle">
+        <div className="max-w-screen-md m-auto mb-12 mt-10 font-geist px-4 text-sm text-subtitle">
           页面加载中...
         </div>
       }

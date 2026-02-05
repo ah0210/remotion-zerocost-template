@@ -1,5 +1,6 @@
 import "../../styles/global.css";
 import { Metadata, Viewport } from "next";
+import { RotatingBanner } from "../components/RotatingBanner";
 
 export const metadata: Metadata = {
   title: "Remotion 视频生成器",
@@ -39,7 +40,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body className="bg-background">{children}</body>
+      <body className="bg-background">
+        <RotatingBanner />
+        {children}
+      </body>
     </html>
   );
 }
