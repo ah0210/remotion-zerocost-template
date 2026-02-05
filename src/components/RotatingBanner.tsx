@@ -8,6 +8,7 @@ type BannerItem = {
   subtitle?: string;
   href: string;
   label?: string;
+  image?: string;
 };
 
 const clampIndex = (index: number, length: number) => {
@@ -34,6 +35,7 @@ export const RotatingBanner = ({
           title: "Remotion 视频生成器：静态部署、零服务器成本",
           subtitle: "了解它怎么在浏览器里完成渲染与导出",
           href: "/tool",
+          image: "/banner-ad.svg",
         },
         {
           label: "快速上手",
@@ -86,6 +88,13 @@ export const RotatingBanner = ({
             href={current.href}
             className="flex min-w-0 flex-1 items-center gap-3"
           >
+            {current.image ? (
+              <img
+                src={current.image}
+                alt=""
+                className="h-8 w-16 object-cover rounded border border-unfocused-border-color"
+              />
+            ) : null}
             {current.label ? (
               <span className="shrink-0 text-[11px] font-semibold px-2 py-1 rounded-full border border-unfocused-border-color text-foreground bg-background">
                 {current.label}
