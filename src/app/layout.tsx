@@ -1,6 +1,8 @@
 import "../../styles/global.css";
 import { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { RotatingBanner } from "../components/RotatingBanner";
+import { Footer } from "../components/Footer";
 
 export const metadata: Metadata = {
   title: "Remotion 视频生成器",
@@ -40,9 +42,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body className="bg-background">
+      <body className="bg-background min-h-screen flex flex-col">
         <RotatingBanner />
-        {children}
+        <main className="flex-1 w-full">
+          {children}
+        </main>
+        <Footer />
+        <Script
+          src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"
+          strategy="lazyOnload"
+        />
       </body>
     </html>
   );
